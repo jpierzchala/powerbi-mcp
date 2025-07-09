@@ -124,10 +124,10 @@ def check_environment():
         print(f"{Colors.YELLOW}Add OPENAI_API_KEY to your .env file{Colors.END}")
         return False
     
-    # Check optional Power BI credentials
+    # Check optional Power BI credentials used as fallback
     tenant_id = os.getenv("DEFAULT_TENANT_ID")
     if tenant_id:
-        print(f"{Colors.GREEN}✓ Default Power BI credentials found (optional){Colors.END}")
+        print(f"{Colors.GREEN}✓ Default Power BI credentials found (fallback){Colors.END}")
     else:
         print(f"{Colors.YELLOW}ℹ Default Power BI credentials not set (optional){Colors.END}")
     

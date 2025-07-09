@@ -138,6 +138,8 @@ OPENAI_API_KEY=your_openai_api_key_here
 OPENAI_MODEL=gpt-4o-mini  # Optional: defaults to gpt-4o-mini
 
 # Optional: Default Power BI Credentials
+# These values are used when the `connect_powerbi` action does not supply
+# tenant_id, client_id or client_secret.
 DEFAULT_TENANT_ID=your_tenant_id
 DEFAULT_CLIENT_ID=your_client_id
 DEFAULT_CLIENT_SECRET=your_client_secret

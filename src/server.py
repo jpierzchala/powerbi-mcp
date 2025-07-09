@@ -388,12 +388,12 @@ class PowerBIMCPServer:
                         "type": "object",
                         "properties": {
                             "xmla_endpoint": {"type": "string", "description": "Power BI XMLA endpoint URL"},
-                            "tenant_id": {"type": "string", "description": "Azure AD Tenant ID"},
-                            "client_id": {"type": "string", "description": "Service Principal Client ID"},
-                            "client_secret": {"type": "string", "description": "Service Principal Client Secret"},
+                            "tenant_id": {"type": "string", "description": "Azure AD Tenant ID (optional)"},
+                            "client_id": {"type": "string", "description": "Service Principal Client ID (optional)"},
+                            "client_secret": {"type": "string", "description": "Service Principal Client Secret (optional)"},
                             "initial_catalog": {"type": "string", "description": "Dataset name"}
                         },
-                        "required": ["xmla_endpoint", "tenant_id", "client_id", "client_secret", "initial_catalog"]
+                        "required": ["xmla_endpoint", "initial_catalog"]
                     }
                 ),
                 Tool(
@@ -485,13 +485,23 @@ class PowerBIMCPServer:
         try:
             with self.connection_lock:
                 # Connect to Power BI
+                tenant_id = arguments.get("tenant_id") or os.getenv("DEFAULT_TENANT_ID")
+                client_id = arguments.get("client_id") or os.getenv("DEFAULT_CLIENT_ID")
+                client_secret = arguments.get("client_secret") or os.getenv("DEFAULT_CLIENT_SECRET")
+
+                if not all([tenant_id, client_id, client_secret]):
+                    return (
+                        "Missing credentials. Provide tenant_id, client_id, and client_secret "
+                        "either in the action arguments or via DEFAULT_* values in the .env file."
+                    )
+
                 await asyncio.get_event_loop().run_in_executor(
                     None,
                     self.connector.connect,
                     arguments["xmla_endpoint"],
-                    arguments["tenant_id"],
-                    arguments["client_id"],
-                    arguments["client_secret"],
+                    tenant_id,
+                    client_id,
+                    client_secret,
                     arguments["initial_catalog"]
                 )
                 
