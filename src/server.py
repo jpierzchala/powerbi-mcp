@@ -82,7 +82,9 @@ except Exception as e:  # pragma: no cover - runtime environment dependent
 # Try to load ADOMD.NET assemblies if clr is available
 adomd_loaded = False
 if clr:
+    env_adomd = os.environ.get("ADOMD_LIB_DIR")
     adomd_paths = [
+        env_adomd,
         r"C:\Program Files\Microsoft.NET\ADOMD.NET\160",
         r"C:\Program Files\Microsoft.NET\ADOMD.NET\150",
         r"C:\Program Files (x86)\Microsoft.NET\ADOMD.NET\160",
@@ -90,6 +92,8 @@ if clr:
     ]
 
     for path in adomd_paths:
+        if not path:
+            continue
         if os.path.exists(path):
             try:
                 sys.path.append(path)
@@ -727,6 +731,7 @@ class PowerBIMCPServer:
                         ),
                     ),
                 )
+            logger.info("Server run completed")
         except anyio.BrokenResourceError:
             logger.info("Client disconnected")
         except Exception as e:
