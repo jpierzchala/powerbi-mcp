@@ -12,7 +12,11 @@ RUN apt-get update && \
     mkdir -p /usr/lib/adomd && \
     wget -q https://www.nuget.org/api/v2/package/Microsoft.AnalysisServices.AdomdClient.netcore.retail.amd64/19.12.7-preview -O /tmp/adomd.nupkg && \
     unzip -q /tmp/adomd.nupkg -d /usr/lib/adomd && \
-    rm /tmp/adomd.nupkg
+    rm /tmp/adomd.nupkg && \
+    wget -q https://www.nuget.org/api/v2/package/Microsoft.Identity.Client/4.6.0 -O /tmp/msal.nupkg && \
+    unzip -q /tmp/msal.nupkg -d /tmp/msal && \
+    cp /tmp/msal/lib/netcoreapp2.1/Microsoft.Identity.Client.dll /usr/lib/adomd/lib/netcoreapp3.0/ && \
+    rm -rf /tmp/msal /tmp/msal.nupkg
 
 # Configure pythonnet to use the installed .NET runtime
 ENV DOTNET_ROOT=/usr/share/dotnet \
