@@ -115,14 +115,12 @@ def check_environment():
     # Load .env file
     load_dotenv()
     
-    # Check OpenAI API key
+    # Check OpenAI API key (optional)
     api_key = os.getenv("OPENAI_API_KEY")
     if api_key and api_key.startswith("sk-"):
         print(f"{Colors.GREEN}✓ OpenAI API key found{Colors.END}")
     else:
-        print(f"{Colors.RED}✗ OpenAI API key not found or invalid{Colors.END}")
-        print(f"{Colors.YELLOW}Add OPENAI_API_KEY to your .env file{Colors.END}")
-        return False
+        print(f"{Colors.YELLOW}ℹ OpenAI API key not set - natural language features will be disabled{Colors.END}")
     
     # Check optional Power BI credentials
     tenant_id = os.getenv("DEFAULT_TENANT_ID")

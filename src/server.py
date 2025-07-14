@@ -446,14 +446,18 @@ class PowerBIMCPServer:
         self.analyzer = None
         self.is_connected = False
         self.connection_lock = threading.Lock()
-        
+
         # Setup server handlers
         self._setup_handlers()
+
+    def _openai_enabled(self) -> bool:
+        """Return True if OpenAI features are enabled"""
+        return bool(os.getenv("OPENAI_API_KEY"))
     
     def _setup_handlers(self):
         @self.server.list_tools()
         async def handle_list_tools() -> List[Tool]:
-            return [
+            tools = [
                 Tool(
                     name="connect_powerbi",
                     description="Connect to a Power BI dataset using XMLA endpoint",
@@ -486,17 +490,6 @@ class PowerBIMCPServer:
                     }
                 ),
                 Tool(
-                    name="query_data",
-                    description="Ask a question about the data in natural language",
-                    inputSchema={
-                        "type": "object",
-                        "properties": {
-                            "question": {"type": "string", "description": "Your question about the data"}
-                        },
-                        "required": ["question"]
-                    }
-                ),
-                Tool(
                     name="execute_dax",
                     description="Execute a custom DAX query",
                     inputSchema={
@@ -507,12 +500,31 @@ class PowerBIMCPServer:
                         "required": ["dax_query"]
                     }
                 ),
-                Tool(
-                    name="suggest_questions",
-                    description="Get suggestions for interesting questions to ask about the data",
-                    inputSchema={"type": "object", "properties": {}}
-                )
             ]
+
+            if self._openai_enabled():
+                tools.append(
+                    Tool(
+                        name="query_data",
+                        description="Ask a question about the data in natural language",
+                        inputSchema={
+                            "type": "object",
+                            "properties": {
+                                "question": {"type": "string", "description": "Your question about the data"}
+                            },
+                            "required": ["question"]
+                        }
+                    )
+                )
+                tools.append(
+                    Tool(
+                        name="suggest_questions",
+                        description="Get suggestions for interesting questions to ask about the data",
+                        inputSchema={"type": "object", "properties": {}}
+                    )
+                )
+
+            return tools
         
         @self.server.list_resources()
         async def handle_list_resources() -> List[Resource]:
@@ -537,11 +549,17 @@ class PowerBIMCPServer:
                 elif name == "get_table_info":
                     result = await self._handle_get_table_info(arguments)
                 elif name == "query_data":
-                    result = await self._handle_query_data(arguments)
+                    if not self._openai_enabled():
+                        result = "OpenAI API key not configured."
+                    else:
+                        result = await self._handle_query_data(arguments)
                 elif name == "execute_dax":
                     result = await self._handle_execute_dax(arguments)
                 elif name == "suggest_questions":
-                    result = await self._handle_suggest_questions()
+                    if not self._openai_enabled():
+                        result = "OpenAI API key not configured."
+                    else:
+                        result = await self._handle_suggest_questions()
                 else:
                     logger.warning(f"Unknown tool: {name}")
                     return [TextContent(type="text", text=f"Unknown tool: {name}")]
@@ -571,14 +589,19 @@ class PowerBIMCPServer:
                 # Initialize the analyzer with OpenAI API key
                 api_key = os.getenv("OPENAI_API_KEY")
                 if not api_key:
-                    return "OpenAI API key not found in environment variables"
-                
-                self.analyzer = DataAnalyzer(api_key)
+                    logger.warning(
+                        "OpenAI API key not provided - natural language features disabled"
+                    )
+                    self.analyzer = None
+                else:
+                    self.analyzer = DataAnalyzer(api_key)
+
                 self.is_connected = True
-                
-                # Discover tables in background
-                asyncio.create_task(self._async_prepare_context())
-                
+
+                # Discover tables in background only if analyzer is available
+                if self.analyzer:
+                    asyncio.create_task(self._async_prepare_context())
+
                 return f"Successfully connected to Power BI dataset '{arguments['initial_catalog']}'. Discovering tables..."
                 
         except Exception as e:
@@ -613,8 +636,9 @@ class PowerBIMCPServer:
                 except Exception as e:
                     logger.warning(f"Failed to get schema for table {table}: {e}")
             
-            self.analyzer.set_data_context(tables, schemas, sample_data)
-            logger.info(f"Context prepared with {len(tables)} tables")
+            if self.analyzer:
+                self.analyzer.set_data_context(tables, schemas, sample_data)
+                logger.info(f"Context prepared with {len(tables)} tables")
             
         except Exception as e:
             logger.error(f"Failed to prepare context: {e}")

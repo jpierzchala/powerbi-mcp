@@ -37,7 +37,7 @@ A Model Context Protocol (MCP) server that enables AI assistants to interact wit
 - SQL Server Management Studio (SSMS) or ADOMD.NET client libraries (Windows only)
 - Power BI Pro/Premium with XMLA endpoint enabled
 - Azure AD Service Principal with access to your Power BI dataset
-- OpenAI API key
+- OpenAI API key (optional for natural language features)
 
 ### Installation
 
@@ -152,18 +152,20 @@ Execute DAX: EVALUATE SUMMARIZE(Sales, Product[Category], "Total", SUM(Sales[Amo
    - Create in Azure Portal → App Registrations
    - Grant access in Power BI Workspace → Access settings
 
-3. **OpenAI API Key**
+3. **OpenAI API Key** *(optional)*
+   - Needed only for natural language features
+   - Endpoints that rely on GPT models are hidden if this key is not set
    - Get from [OpenAI Platform](https://platform.openai.com)
    - Model used: `gpt-4o-mini` (200x cheaper than GPT-4)
 
 ### Environment Variables
 
-Create a `.env` file:
+Create a `.env` file (OpenAI settings are optional):
 
 ```env
-# OpenAI Configuration
+# OpenAI Configuration (optional)
 OPENAI_API_KEY=your_openai_api_key_here
-OPENAI_MODEL=gpt-4o-mini  # Optional: defaults to gpt-4o-mini
+OPENAI_MODEL=gpt-4o-mini  # Defaults to gpt-4o-mini
 
 # Optional: Default Power BI Credentials
 DEFAULT_TENANT_ID=your_tenant_id
