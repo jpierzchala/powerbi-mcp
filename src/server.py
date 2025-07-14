@@ -63,6 +63,24 @@ def clean_dax_query(dax_query: str) -> str:
 # Load environment variables
 load_dotenv()
 
+# Prepare ADOMD.NET search paths before importing pyadomd
+env_adomd = os.environ.get("ADOMD_LIB_DIR")
+adomd_paths = [
+    env_adomd,
+    r"C:\\Program Files\\Microsoft.NET\\ADOMD.NET\\160",
+    r"C:\\Program Files\\Microsoft.NET\\ADOMD.NET\\150",
+    r"C:\\Program Files (x86)\\Microsoft.NET\\ADOMD.NET\\160",
+    r"C:\\Program Files (x86)\\Microsoft.NET\\ADOMD.NET\\150",
+    r"C:\\Program Files (x86)\\MicrosoftOffice\\root\\vfs\\ProgramFilesX86\\Microsoft.NET\\ADOMD.NET\\130",
+]
+logger.info(
+    "Adding ADOMD.NET paths to sys.path: %s",
+    ", ".join([p for p in adomd_paths if p]),
+)
+for p in adomd_paths:
+    if p and os.path.exists(p):
+        sys.path.append(p)
+
 # Ensure pythonnet uses coreclr runtime (works on Linux)
 import pythonnet
 pythonnet_runtime = os.environ.get("PYTHONNET_RUNTIME", "coreclr")
@@ -92,16 +110,9 @@ AdomdSchemaGuid = _DummySchemaGuid
 # Try to load ADOMD.NET assemblies if clr is available
 adomd_loaded = False
 if clr:
-    env_adomd = os.environ.get("ADOMD_LIB_DIR")
-    adomd_paths = [
-        env_adomd,
-        r"C:\Program Files\Microsoft.NET\ADOMD.NET\160",
-        r"C:\Program Files\Microsoft.NET\ADOMD.NET\150",
-        r"C:\Program Files (x86)\Microsoft.NET\ADOMD.NET\160",
-        r"C:\Program Files (x86)\Microsoft.NET\ADOMD.NET\150",
-    ]
-
-    logger.info("Searching for ADOMD.NET in: %s", ", ".join([p for p in adomd_paths if p]))
+    logger.info(
+        "Searching for ADOMD.NET in: %s", ", ".join([p for p in adomd_paths if p])
+    )
     for path in adomd_paths:
         if not path:
             continue
