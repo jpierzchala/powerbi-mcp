@@ -106,15 +106,19 @@ if clr:
         if not path:
             continue
         if os.path.exists(path):
-            dll = os.path.join(path, "Microsoft.AnalysisServices.AdomdClient.dll")
+            dll_adomd = os.path.join(path, "Microsoft.AnalysisServices.AdomdClient.dll")
+            dll_core = os.path.join(path, "Microsoft.AnalysisServices.Platform.Core.dll")
+            dll_win = os.path.join(path, "Microsoft.AnalysisServices.Platform.Windows.dll")
             try:
                 sys.path.append(path)
-                clr.AddReference(dll)
+                clr.AddReference(dll_core)
+                clr.AddReference(dll_win)
+                clr.AddReference(dll_adomd)
                 adomd_loaded = True
-                logger.info("Loaded ADOMD.NET from %s", dll)
+                logger.info("Loaded ADOMD.NET from %s", dll_adomd)
                 break
             except Exception as e:  # pragma: no cover - best effort
-                logger.warning("Failed to load ADOMD.NET from %s: %s", dll, e)
+                logger.warning("Failed to load ADOMD.NET from %s: %s", dll_adomd, e)
                 continue
 
     if adomd_loaded:
