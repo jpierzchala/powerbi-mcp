@@ -18,7 +18,7 @@ RUN apt-get update && \
 ENV DOTNET_ROOT=/usr/share/dotnet \
     PYTHONNET_RUNTIME=coreclr \
     ADOMD_LIB_DIR=/usr/lib/adomd/lib/netcoreapp3.0 \
-    PATH="$PATH:/usr/share/dotnet"
+    PATH="$PATH:/usr/share/dotnet:/usr/lib/adomd/lib/netcoreapp3.0"
 
 WORKDIR /app
 
