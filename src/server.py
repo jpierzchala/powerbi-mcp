@@ -321,6 +321,120 @@ class PowerBIConnector:
         dax_query = f"EVALUATE TOPN({num_rows}, '{table_name}')"
         return self.execute_dax_query(dax_query)
 
+    def _get_table_id(self, conn, table_name: str) -> Optional[int]:
+        """Return the internal ID for a table"""
+        id_cursor = conn.cursor()
+        id_query = (
+            f"SELECT [ID] FROM $SYSTEM.TMSCHEMA_TABLES WHERE [Name] = '{table_name}'"
+        )
+        id_cursor.execute(id_query)
+        table_id_result = id_cursor.fetchone()
+        id_cursor.close()
+        return table_id_result[0] if table_id_result else None
+
+    def get_table_descriptions(self) -> Dict[str, str]:
+        """Return descriptions for all tables"""
+        if not self.connected:
+            raise Exception("Not connected to Power BI")
+
+        self._check_pyadomd()
+        try:
+            with Pyadomd(self.connection_string) as conn:
+                cursor = conn.cursor()
+                cursor.execute(
+                    "SELECT [Name], [Description] FROM $SYSTEM.TMSCHEMA_TABLES"
+                )
+                rows = cursor.fetchall()
+                cursor.close()
+                return {row[0]: row[1] or "" for row in rows}
+        except Exception as e:
+            logger.error(f"Failed to get table descriptions: {e}")
+            raise
+
+    def get_column_descriptions(self, table_name: str) -> Dict[str, str]:
+        """Return descriptions for columns of a table"""
+        if not self.connected:
+            raise Exception("Not connected to Power BI")
+
+        self._check_pyadomd()
+        try:
+            with Pyadomd(self.connection_string) as conn:
+                table_id = self._get_table_id(conn, table_name)
+                if table_id is None:
+                    return {}
+                cursor = conn.cursor()
+                query = (
+                    "SELECT [Name], [Description] FROM $SYSTEM.TMSCHEMA_COLUMNS "
+                    f"WHERE [TableID] = {table_id}"
+                )
+                cursor.execute(query)
+                rows = cursor.fetchall()
+                cursor.close()
+                return {row[0]: row[1] or "" for row in rows}
+        except Exception as e:
+            logger.error(
+                f"Failed to get column descriptions for '{table_name}': {e}"
+            )
+            return {}
+
+    def get_relationships(self) -> List[Dict[str, str]]:
+        """Return all table relationships"""
+        if not self.connected:
+            raise Exception("Not connected to Power BI")
+
+        self._check_pyadomd()
+
+        try:
+            with Pyadomd(self.connection_string) as conn:
+                # Table map
+                t_cursor = conn.cursor()
+                t_cursor.execute("SELECT [ID], [Name] FROM $SYSTEM.TMSCHEMA_TABLES")
+                tables = {row[0]: row[1] for row in t_cursor.fetchall()}
+                t_cursor.close()
+
+                # Column map
+                c_cursor = conn.cursor()
+                c_cursor.execute(
+                    "SELECT [ID], [TableID], [Name] FROM $SYSTEM.TMSCHEMA_COLUMNS"
+                )
+                cols = {
+                    row[0]: {"table_id": row[1], "name": row[2]} for row in c_cursor.fetchall()
+                }
+                c_cursor.close()
+
+                r_cursor = conn.cursor()
+                r_cursor.execute(
+                    "SELECT [FromColumnID], [ToColumnID] FROM $SYSTEM.TMSCHEMA_RELATIONSHIPS"
+                )
+                relationships = []
+                for row in r_cursor.fetchall():
+                    from_col = cols.get(row[0])
+                    to_col = cols.get(row[1])
+                    if not from_col or not to_col:
+                        continue
+                    relationships.append(
+                        {
+                            "from_table": tables.get(from_col["table_id"]),
+                            "from_column": from_col["name"],
+                            "to_table": tables.get(to_col["table_id"]),
+                            "to_column": to_col["name"],
+                        }
+                    )
+                r_cursor.close()
+                return relationships
+        except Exception as e:
+            logger.error(f"Failed to get relationships: {e}")
+            return []
+
+    def get_relationships_for_table(self, table_name: str) -> List[Dict[str, str]]:
+        """Return relationships involving the specified table"""
+        all_rels = self.get_relationships()
+        return [
+            r
+            for r in all_rels
+            if r.get("from_table") == table_name or r.get("to_table") == table_name
+        ]
+
 
 class DataAnalyzer:
     def __init__(self, api_key: str):
@@ -662,12 +776,31 @@ class PowerBIMCPServer:
             tables = await asyncio.get_event_loop().run_in_executor(
                 None, self.connector.discover_tables
             )
-            
+            descriptions = await asyncio.get_event_loop().run_in_executor(
+                None, self.connector.get_table_descriptions
+            )
+            relationships = await asyncio.get_event_loop().run_in_executor(
+                None, self.connector.get_relationships
+            )
+
             if not tables:
                 return "No tables found in the dataset."
-            
-            table_list = "\n".join([f"- {table}" for table in tables])
-            return f"Available tables:\n{table_list}"
+
+            table_lines = []
+            for t in tables:
+                desc = descriptions.get(t, "")
+                line = f"- {t}" + (f": {desc}" if desc else "")
+                table_lines.append(line)
+
+            rel_lines = [
+                f"{r['from_table']}.{r['from_column']} -> {r['to_table']}.{r['to_column']}"
+                for r in relationships
+            ]
+
+            table_list = "\n".join(table_lines)
+            rel_list = "\n".join(rel_lines) if rel_lines else "None"
+
+            return f"Available tables:\n{table_list}\n\nRelationships:\n{rel_list}"
         except Exception as e:
             logger.error(f"Failed to list tables: {e}")
             return f"Error listing tables: {str(e)}"
@@ -685,7 +818,16 @@ class PowerBIMCPServer:
             schema = await asyncio.get_event_loop().run_in_executor(
                 None, self.connector.get_table_schema, table_name
             )
-            
+            descriptions = await asyncio.get_event_loop().run_in_executor(
+                None, self.connector.get_table_descriptions
+            )
+            column_desc = await asyncio.get_event_loop().run_in_executor(
+                None, self.connector.get_column_descriptions, table_name
+            )
+            rels = await asyncio.get_event_loop().run_in_executor(
+                None, self.connector.get_relationships_for_table, table_name
+            )
+
             if schema["type"] == "data_table":
                 sample_data = await asyncio.get_event_loop().run_in_executor(
                     None, self.connector.get_sample_data, table_name, 5
@@ -698,7 +840,24 @@ class PowerBIMCPServer:
                     result += f"\n- {measure['name']}:\n  DAX: {measure['dax']}\n"
             else:
                 result = f"Table: {table_name}\nType: {schema['type']}"
-            
+
+            table_desc = descriptions.get(table_name, "")
+            if table_desc:
+                result += f"\nDescription: {table_desc}"
+
+            if column_desc:
+                result += "\nColumn descriptions:\n"
+                for col, desc in column_desc.items():
+                    if desc:
+                        result += f"- {col}: {desc}\n"
+
+            if rels:
+                rel_lines = [
+                    f"{r['from_table']}.{r['from_column']} -> {r['to_table']}.{r['to_column']}"
+                    for r in rels
+                ]
+                result += "\nRelationships:\n" + "\n".join(rel_lines)
+
             return result
             
         except Exception as e:

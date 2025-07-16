@@ -134,6 +134,75 @@ class TestPowerBIConnector:
         assert results[1]["Column2"] == "Value4"
         mock_cursor.execute.assert_called_once_with("EVALUATE Sales")
 
+    def test_get_table_descriptions(self, connector, mock_pyadomd):
+        """Test fetching table descriptions"""
+        connector.connected = True
+        connector.connection_string = "test"
+
+        mock_cursor = Mock()
+        mock_cursor.fetchall.return_value = [
+            ("Sales", "Sales table"),
+            ("Product", None),
+        ]
+
+        mock_conn = Mock()
+        mock_conn.cursor.return_value = mock_cursor
+        mock_pyadomd.return_value.__enter__.return_value = mock_conn
+
+        desc = connector.get_table_descriptions()
+
+        assert desc["Sales"] == "Sales table"
+        assert desc["Product"] == ""
+        mock_cursor.execute.assert_called_once()
+
+    def test_get_column_descriptions(self, connector, mock_pyadomd):
+        """Test fetching column descriptions for a table"""
+        connector.connected = True
+        connector.connection_string = "test"
+
+        cursor_id = Mock()
+        cursor_id.fetchone.return_value = (1,)
+        cursor_cols = Mock()
+        cursor_cols.fetchall.return_value = [("Col1", "desc1"), ("Col2", None)]
+
+        mock_conn = Mock()
+        mock_conn.cursor.side_effect = [cursor_id, cursor_cols]
+        mock_pyadomd.return_value.__enter__.return_value = mock_conn
+
+        desc = connector.get_column_descriptions("Sales")
+
+        assert desc == {"Col1": "desc1", "Col2": ""}
+
+    def test_get_relationships(self, connector, mock_pyadomd):
+        """Test retrieving relationships"""
+        connector.connected = True
+        connector.connection_string = "test"
+
+        cursor_tables = Mock()
+        cursor_tables.fetchall.return_value = [(1, "Sales"), (2, "Product")]
+        cursor_columns = Mock()
+        cursor_columns.fetchall.return_value = [
+            (10, 1, "ProductID"),
+            (11, 2, "ID"),
+        ]
+        cursor_rels = Mock()
+        cursor_rels.fetchall.return_value = [(10, 11)]
+
+        mock_conn = Mock()
+        mock_conn.cursor.side_effect = [cursor_tables, cursor_columns, cursor_rels]
+        mock_pyadomd.return_value.__enter__.return_value = mock_conn
+
+        rels = connector.get_relationships()
+
+        assert rels == [
+            {
+                "from_table": "Sales",
+                "from_column": "ProductID",
+                "to_table": "Product",
+                "to_column": "ID",
+            }
+        ]
+
 
 class TestDAXCleaning:
     """Test cases for DAX query cleaning"""
