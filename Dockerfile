@@ -2,9 +2,11 @@ FROM python:3.11-slim
 
 # Install .NET runtime and ADOMD.NET libraries
 COPY scripts/install_dotnet_adomd.sh /tmp/install_dotnet_adomd.sh
-RUN chmod +x /tmp/install_dotnet_adomd.sh && \
-    /tmp/install_dotnet_adomd.sh --system && \
-    rm /tmp/install_dotnet_adomd.sh
+
+RUN sed -i 's/\r$//' /tmp/install_dotnet_adomd.sh \
+ && chmod +x /tmp/install_dotnet_adomd.sh \
+ && bash /tmp/install_dotnet_adomd.sh --system \
+ && rm /tmp/install_dotnet_adomd.sh
 
 # Configure pythonnet to use the installed .NET runtime
 ENV DOTNET_ROOT=/usr/share/dotnet \
