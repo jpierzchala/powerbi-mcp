@@ -1,0 +1,60 @@
+#!/usr/bin/env bash
+set -e
+
+# Install .NET runtime and ADOMD.NET libraries.
+# Usage: ./install_dotnet_adomd.sh [--system|--user]
+
+MODE="system"
+if [[ "$1" == "--user" ]]; then
+  MODE="user"
+fi
+
+DOTNET_PKG=${DOTNET_PKG:-dotnet-runtime-8.0}
+ADOMD_VER=${ADOMD_VER:-19.12.7-preview}
+MSAL_VER=${MSAL_VER:-4.6.0}
+
+if [[ "$MODE" == "system" ]]; then
+  if [ "$(id -u)" -ne 0 ]; then
+    SUDO="sudo"
+  fi
+  $SUDO apt-get update
+  $SUDO apt-get install -y --no-install-recommends gnupg wget ca-certificates unzip
+  wget -q https://packages.microsoft.com/config/debian/12/packages-microsoft-prod.deb
+  $SUDO dpkg -i packages-microsoft-prod.deb
+  rm packages-microsoft-prod.deb
+  $SUDO apt-get update
+  $SUDO apt-get install -y --no-install-recommends "$DOTNET_PKG"
+  $SUDO apt-get clean
+  $SUDO rm -rf /var/lib/apt/lists/*
+  DOTNET_ROOT=/usr/share/dotnet
+  ADOMD_DIR=/usr/lib/adomd
+else
+  INSTALL_ROOT="$HOME/.local"
+  DOTNET_ROOT="$INSTALL_ROOT/dotnet"
+  ADOMD_DIR="$INSTALL_ROOT/lib/adomd"
+  mkdir -p "$DOTNET_ROOT"
+  wget -q https://dot.net/v1/dotnet-install.sh -O /tmp/dotnet-install.sh
+  bash /tmp/dotnet-install.sh --install-dir "$DOTNET_ROOT" --runtime dotnet --no-path
+  rm /tmp/dotnet-install.sh
+fi
+
+mkdir -p "$ADOMD_DIR"
+wget -q "https://www.nuget.org/api/v2/package/Microsoft.AnalysisServices.AdomdClient.netcore.retail.amd64/${ADOMD_VER}" -O /tmp/adomd.nupkg
+unzip -q /tmp/adomd.nupkg -d "$ADOMD_DIR"
+rm /tmp/adomd.nupkg
+
+wget -q "https://www.nuget.org/api/v2/package/Microsoft.Identity.Client/${MSAL_VER}" -O /tmp/msal.nupkg
+unzip -q /tmp/msal.nupkg -d /tmp/msal
+cp /tmp/msal/lib/netcoreapp2.1/Microsoft.Identity.Client.dll "$ADOMD_DIR"/lib/netcoreapp3.0/ || true
+rm -rf /tmp/msal /tmp/msal.nupkg
+
+cat <<EOT > "$ADOMD_DIR/activate_adomd_env.sh"
+export DOTNET_ROOT=${DOTNET_ROOT}
+export PYTHONNET_RUNTIME=coreclr
+export ADOMD_LIB_DIR=${ADOMD_DIR}/lib/netcoreapp3.0
+export PATH=\"${DOTNET_ROOT}:$PATH\"
+EOT
+
+chmod +x "$ADOMD_DIR/activate_adomd_env.sh"
+
+echo "Installation complete. Source $ADOMD_DIR/activate_adomd_env.sh to configure your environment."
