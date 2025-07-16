@@ -13,6 +13,7 @@ python-dotenv
 
 # Async Support
 anyio
+aiohttp
 
 # Type Hints
 typing-extensions
