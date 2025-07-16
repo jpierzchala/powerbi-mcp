@@ -33,11 +33,11 @@ A Model Context Protocol (MCP) server that enables AI assistants to interact wit
 ### Prerequisites
 
 - Python 3.8 or higher
-- Windows OS (required for ADOMD.NET)
-- SQL Server Management Studio (SSMS) or ADOMD.NET client libraries
+- Windows with ADOMD.NET **or** Docker on Linux (container includes the runtime)
+- SQL Server Management Studio (SSMS) or ADOMD.NET client libraries (Windows only)
 - Power BI Pro/Premium with XMLA endpoint enabled
 - Azure AD Service Principal with access to your Power BI dataset
-- OpenAI API key
+- OpenAI API key (optional for natural language features)
 
 ### Installation
 
@@ -85,6 +85,34 @@ Add to your Claude Desktop configuration file:
 }
 ```
 
+### Docker
+
+Build the container image:
+```bash
+docker build -t powerbi-mcp .
+```
+
+Run the server:
+```bash
+docker run -it --rm -e OPENAI_API_KEY=<key> powerbi-mcp
+```
+The container listens on port `8000` by default. Override the host or port using
+environment variables or command-line arguments:
+```bash
+docker run -it --rm -e OPENAI_API_KEY=<key> -p 7000:7000 powerbi-mcp \
+  python src/server.py --host 0.0.0.0 --port 7000
+```
+
+The server exposes a Server-Sent Events endpoint at `/sse`. Clients should
+connect to this endpoint and then POST JSON-RPC messages to the path provided in
+the initial `endpoint` event (typically `/messages/`).
+
+The container includes the .NET runtime required by `pythonnet` and `pyadomd`.
+It sets `PYTHONNET_RUNTIME=coreclr` and `DOTNET_ROOT=/usr/share/dotnet` so the
+.NET runtime is detected automatically. Environment variables mirror those in
+`.env.example`; pass them with `-e VAR=value` or provide a `.env` file in the
+build context.
+
 ## 📖 Usage
 
 Once configured, you can interact with your Power BI data through Claude:
@@ -124,18 +152,20 @@ Execute DAX: EVALUATE SUMMARIZE(Sales, Product[Category], "Total", SUM(Sales[Amo
    - Create in Azure Portal → App Registrations
    - Grant access in Power BI Workspace → Access settings
 
-3. **OpenAI API Key**
+3. **OpenAI API Key** *(optional)*
+   - Needed only for natural language features
+   - Endpoints that rely on GPT models are hidden if this key is not set
    - Get from [OpenAI Platform](https://platform.openai.com)
    - Model used: `gpt-4o-mini` (200x cheaper than GPT-4)
 
 ### Environment Variables
 
-Create a `.env` file:
+Create a `.env` file (OpenAI settings are optional):
 
 ```env
-# OpenAI Configuration
+# OpenAI Configuration (optional)
 OPENAI_API_KEY=your_openai_api_key_here
-OPENAI_MODEL=gpt-4o-mini  # Optional: defaults to gpt-4o-mini
+OPENAI_MODEL=gpt-4o-mini  # Defaults to gpt-4o-mini
 
 # Optional: Default Power BI Credentials
 # These values are used when the `connect_powerbi` action does not supply
@@ -212,8 +242,8 @@ We welcome contributions! Please see [CONTRIBUTING.md](CONTRIBUTING.md) for deta
 ### Common Issues
 
 1. **ADOMD.NET not found**
-   - Install SQL Server Management Studio (SSMS)
-   - Or download [ADOMD.NET](https://docs.microsoft.com/en-us/analysis-services/client-libraries)
+   - For Windows, install SQL Server Management Studio (SSMS)
+   - On Linux, use the provided Docker image which bundles the cross-platform ADOMD.NET runtime
 
 2. **Connection fails**
    - Verify XMLA endpoint is enabled in Power BI

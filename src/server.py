@@ -1,20 +1,25 @@
 import asyncio
+import argparse
 from typing import Any, Dict, List, Optional
 from mcp.server import Server, NotificationOptions
 from mcp.server.models import InitializationOptions
-import mcp.server.stdio
+from mcp.server.sse import SseServerTransport
+from starlette.applications import Starlette
+from starlette.responses import Response
+from starlette.routing import Route, Mount
+import uvicorn
 import os
 from dotenv import load_dotenv
 import json
 from datetime import datetime, date
 from decimal import Decimal
 import sys
-import clr
 import openai
 import re
 from concurrent.futures import ThreadPoolExecutor
 import threading
 import logging
+import anyio  # Needed for server run loop cleanup
 
 # Configure logging to stderr for MCP debugging
 logging.basicConfig(
@@ -51,42 +56,90 @@ def clean_dax_query(dax_query: str) -> str:
     """Remove HTML/XML tags and other artifacts from DAX queries"""
     # Remove HTML/XML tags like <oii>, </oii>, etc.
     cleaned = re.sub(r'<[^>]+>', '', dax_query)
-    # Remove any remaining angle brackets
-    cleaned = cleaned.replace('<', '').replace('>', '')
-    # Clean up extra whitespace
+    # Collapse extra whitespace
     cleaned = ' '.join(cleaned.split())
     return cleaned
     
 # Load environment variables
 load_dotenv()
 
-# Add the path to the ADOMD.NET library
+# Prepare ADOMD.NET search paths before importing pyadomd
+env_adomd = os.environ.get("ADOMD_LIB_DIR")
 adomd_paths = [
-    r"C:\Program Files\Microsoft.NET\ADOMD.NET\160",
-    r"C:\Program Files\Microsoft.NET\ADOMD.NET\150",
-    r"C:\Program Files (x86)\Microsoft.NET\ADOMD.NET\160",
-    r"C:\Program Files (x86)\Microsoft.NET\ADOMD.NET\150"
+    env_adomd,
+    r"C:\\Program Files\\Microsoft.NET\\ADOMD.NET\\160",
+    r"C:\\Program Files\\Microsoft.NET\\ADOMD.NET\\150",
+    r"C:\\Program Files (x86)\\Microsoft.NET\\ADOMD.NET\\160",
+    r"C:\\Program Files (x86)\\Microsoft.NET\\ADOMD.NET\\150",
+    r"C:\\Program Files (x86)\\MicrosoftOffice\\root\\vfs\\ProgramFilesX86\\Microsoft.NET\\ADOMD.NET\\130",
 ]
+logger.info(
+    "Adding ADOMD.NET paths to sys.path: %s",
+    ", ".join([p for p in adomd_paths if p]),
+)
+for p in adomd_paths:
+    if p and os.path.exists(p):
+        sys.path.append(p)
 
+# Ensure pythonnet uses coreclr runtime (works on Linux)
+import pythonnet
+pythonnet_runtime = os.environ.get("PYTHONNET_RUNTIME", "coreclr")
+logger.info("Configuring pythonnet runtime: %s", pythonnet_runtime)
+try:
+    pythonnet.set_runtime(pythonnet_runtime)
+except Exception as e:  # pragma: no cover - best effort
+    logger.warning("Failed to set pythonnet runtime: %s", e)
+
+# Attempt to import clr and pyadomd. These may be missing when ADOMD.NET is not
+# installed. We load the actual ADOMD.NET assembly later if possible.
+try:
+    import clr  # type: ignore
+    from pyadomd import Pyadomd  # type: ignore
+    logger.debug("pythonnet and pyadomd imported successfully")
+except Exception as e:  # pragma: no cover - runtime environment dependent
+    clr = None
+    Pyadomd = None
+    logger.warning("pyadomd not available: %s", e)
+
+# Placeholder for AdomdSchemaGuid if the assembly fails to load
+class _DummySchemaGuid:
+    Tables = 0
+
+AdomdSchemaGuid = _DummySchemaGuid
+
+# Try to load ADOMD.NET assemblies if clr is available
 adomd_loaded = False
-for path in adomd_paths:
-    if os.path.exists(path):
-        try:
-            sys.path.append(path)
-            clr.AddReference("Microsoft.AnalysisServices.AdomdClient")
-            adomd_loaded = True
-            logger.info(f"Loaded ADOMD.NET from {path}")
-            break
-        except Exception as e:
-            logger.debug(f"Failed to load ADOMD.NET from {path}: {e}")
+if clr:
+    logger.info(
+        "Searching for ADOMD.NET in: %s", ", ".join([p for p in adomd_paths if p])
+    )
+    for path in adomd_paths:
+        if not path:
             continue
+        if os.path.exists(path):
+            dll = os.path.join(path, "Microsoft.AnalysisServices.AdomdClient.dll")
+            try:
+                sys.path.append(path)
+                clr.AddReference(dll)
+                adomd_loaded = True
+                logger.info("Loaded ADOMD.NET from %s", dll)
+                break
+            except Exception as e:  # pragma: no cover - best effort
+                logger.warning("Failed to load ADOMD.NET from %s: %s", dll, e)
+                continue
+
+    if adomd_loaded:
+        try:
+            from Microsoft.AnalysisServices.AdomdClient import AdomdSchemaGuid as _ASG
+            globals()["AdomdSchemaGuid"] = _ASG
+            logger.debug("ADOMD.NET types imported")
+        except Exception as e:  # pragma: no cover - best effort
+            logger.warning("Failed to import AdomdSchemaGuid: %s", e)
 
 if not adomd_loaded:
-    logger.error("Could not load ADOMD.NET library")
-    raise ImportError("Could not load ADOMD.NET library. Please install SSMS or ADOMD.NET client.")
-
-from pyadomd import Pyadomd
-from Microsoft.AnalysisServices.AdomdClient import AdomdSchemaGuid
+    logger.warning(
+        "ADOMD.NET library not found. Pyadomd functionality will be disabled."
+    )
 
 
 class PowerBIConnector:
@@ -97,10 +150,17 @@ class PowerBIConnector:
         self.metadata = {}
         # Thread pool for async operations
         self.executor = ThreadPoolExecutor(max_workers=4)
+
+    def _check_pyadomd(self):
+        if Pyadomd is None:
+            raise Exception(
+                "Pyadomd library not available. Ensure .NET runtime and ADOMD.NET are installed"
+            )
         
-    def connect(self, xmla_endpoint: str, tenant_id: str, client_id: str, 
+    def connect(self, xmla_endpoint: str, tenant_id: str, client_id: str,
                 client_secret: str, initial_catalog: str) -> bool:
         """Establish connection to Power BI dataset"""
+        self._check_pyadomd()
         self.connection_string = (
             f"Provider=MSOLAP;"
             f"Data Source={xmla_endpoint};"
@@ -125,6 +185,8 @@ class PowerBIConnector:
         """Discover all user-facing tables in the dataset"""
         if not self.connected:
             raise Exception("Not connected to Power BI")
+
+        self._check_pyadomd()
             
         # Return cached tables if already discovered
         if self.tables:
@@ -136,8 +198,9 @@ class PowerBIConnector:
                 adomd_connection = pyadomd_conn.conn
                 tables_dataset = adomd_connection.GetSchemaDataSet(AdomdSchemaGuid.Tables, None)
                 
-                if tables_dataset and tables_dataset.Tables.Count > 0:
-                    schema_table = tables_dataset.Tables[0]
+                tables_list_obj = getattr(tables_dataset, "Tables", None)
+                if tables_list_obj and len(tables_list_obj) > 0:
+                    schema_table = tables_list_obj[0]
                     for row in schema_table.Rows:
                         table_name = row["TABLE_NAME"]
                         if (not table_name.startswith("$") and 
@@ -156,6 +219,8 @@ class PowerBIConnector:
         """Get schema information for a specific table"""
         if not self.connected:
             raise Exception("Not connected to Power BI")
+
+        self._check_pyadomd()
             
         try:
             with Pyadomd(self.connection_string) as conn:
@@ -184,6 +249,10 @@ class PowerBIConnector:
     
     def get_measures_for_table(self, table_name: str) -> Dict[str, Any]:
         """Get measures for a measure table"""
+        if not self.connected:
+            raise Exception("Not connected to Power BI")
+
+        self._check_pyadomd()
         try:
             with Pyadomd(self.connection_string) as conn:
                 # Get table ID
@@ -219,6 +288,8 @@ class PowerBIConnector:
         """Execute a DAX query and return results"""
         if not self.connected:
             raise Exception("Not connected to Power BI")
+
+        self._check_pyadomd()
             
         # Clean the DAX query
         cleaned_query = clean_dax_query(dax_query)
@@ -367,20 +438,26 @@ class DataAnalyzer:
 
 
 class PowerBIMCPServer:
-    def __init__(self):
+    def __init__(self, host: Optional[str] = None, port: Optional[int] = None):
+        self.host = host or os.getenv("HOST", "0.0.0.0")
+        self.port = int(port or os.getenv("PORT", "8000"))
         self.server = Server("powerbi-mcp-server")
         self.connector = PowerBIConnector()
         self.analyzer = None
         self.is_connected = False
         self.connection_lock = threading.Lock()
-        
+
         # Setup server handlers
         self._setup_handlers()
+
+    def _openai_enabled(self) -> bool:
+        """Return True if OpenAI features are enabled"""
+        return bool(os.getenv("OPENAI_API_KEY"))
     
     def _setup_handlers(self):
         @self.server.list_tools()
         async def handle_list_tools() -> List[Tool]:
-            return [
+            tools = [
                 Tool(
                     name="connect_powerbi",
                     description="Connect to a Power BI dataset using XMLA endpoint",
@@ -413,17 +490,6 @@ class PowerBIMCPServer:
                     }
                 ),
                 Tool(
-                    name="query_data",
-                    description="Ask a question about the data in natural language",
-                    inputSchema={
-                        "type": "object",
-                        "properties": {
-                            "question": {"type": "string", "description": "Your question about the data"}
-                        },
-                        "required": ["question"]
-                    }
-                ),
-                Tool(
                     name="execute_dax",
                     description="Execute a custom DAX query",
                     inputSchema={
@@ -434,12 +500,31 @@ class PowerBIMCPServer:
                         "required": ["dax_query"]
                     }
                 ),
-                Tool(
-                    name="suggest_questions",
-                    description="Get suggestions for interesting questions to ask about the data",
-                    inputSchema={"type": "object", "properties": {}}
-                )
             ]
+
+            if self._openai_enabled():
+                tools.append(
+                    Tool(
+                        name="query_data",
+                        description="Ask a question about the data in natural language",
+                        inputSchema={
+                            "type": "object",
+                            "properties": {
+                                "question": {"type": "string", "description": "Your question about the data"}
+                            },
+                            "required": ["question"]
+                        }
+                    )
+                )
+                tools.append(
+                    Tool(
+                        name="suggest_questions",
+                        description="Get suggestions for interesting questions to ask about the data",
+                        inputSchema={"type": "object", "properties": {}}
+                    )
+                )
+
+            return tools
         
         @self.server.list_resources()
         async def handle_list_resources() -> List[Resource]:
@@ -464,11 +549,17 @@ class PowerBIMCPServer:
                 elif name == "get_table_info":
                     result = await self._handle_get_table_info(arguments)
                 elif name == "query_data":
-                    result = await self._handle_query_data(arguments)
+                    if not self._openai_enabled():
+                        result = "OpenAI API key not configured."
+                    else:
+                        result = await self._handle_query_data(arguments)
                 elif name == "execute_dax":
                     result = await self._handle_execute_dax(arguments)
                 elif name == "suggest_questions":
-                    result = await self._handle_suggest_questions()
+                    if not self._openai_enabled():
+                        result = "OpenAI API key not configured."
+                    else:
+                        result = await self._handle_suggest_questions()
                 else:
                     logger.warning(f"Unknown tool: {name}")
                     return [TextContent(type="text", text=f"Unknown tool: {name}")]
@@ -508,14 +599,19 @@ class PowerBIMCPServer:
                 # Initialize the analyzer with OpenAI API key
                 api_key = os.getenv("OPENAI_API_KEY")
                 if not api_key:
-                    return "OpenAI API key not found in environment variables"
-                
-                self.analyzer = DataAnalyzer(api_key)
+                    logger.warning(
+                        "OpenAI API key not provided - natural language features disabled"
+                    )
+                    self.analyzer = None
+                else:
+                    self.analyzer = DataAnalyzer(api_key)
+
                 self.is_connected = True
-                
-                # Discover tables in background
-                asyncio.create_task(self._async_prepare_context())
-                
+
+                # Discover tables in background only if analyzer is available
+                if self.analyzer:
+                    asyncio.create_task(self._async_prepare_context())
+
                 return f"Successfully connected to Power BI dataset '{arguments['initial_catalog']}'. Discovering tables..."
                 
         except Exception as e:
@@ -550,8 +646,9 @@ class PowerBIMCPServer:
                 except Exception as e:
                     logger.warning(f"Failed to get schema for table {table}: {e}")
             
-            self.analyzer.set_data_context(tables, schemas, sample_data)
-            logger.info(f"Context prepared with {len(tables)} tables")
+            if self.analyzer:
+                self.analyzer.set_data_context(tables, schemas, sample_data)
+                logger.info(f"Context prepared with {len(tables)} tables")
             
         except Exception as e:
             logger.error(f"Failed to prepare context: {e}")
@@ -685,33 +782,71 @@ class PowerBIMCPServer:
             return f"Error generating suggestions: {str(e)}"
     
     async def run(self):
-        """Run the MCP server"""
-        try:
-            logger.info("Starting Power BI MCP Server...")
-            async with mcp.server.stdio.stdio_server() as (read_stream, write_stream):
-                await self.server.run(
+        """Run the MCP server over SSE"""
+        persist = os.getenv("MCP_PERSIST", "1") != "0"
+        host = self.host
+        port = self.port
+
+        sse = SseServerTransport("/messages/")
+
+        class SseApp:
+            async def __call__(self, scope, receive, send):
+                async with sse.connect_sse(scope, receive, send) as (
                     read_stream,
                     write_stream,
-                    InitializationOptions(
-                        server_name="powerbi-mcp-server",
-                        server_version="1.0.0",
-                        capabilities=self.server.get_capabilities(
-                            notification_options=NotificationOptions(),
-                            experimental_capabilities={},
+                ):
+                    await self_server.run(
+                        read_stream,
+                        write_stream,
+                        InitializationOptions(
+                            server_name="powerbi-mcp-server",
+                            server_version="1.0.0",
+                            capabilities=self_server.get_capabilities(
+                                notification_options=NotificationOptions(),
+                                experimental_capabilities={},
+                            ),
                         ),
-                    ),
-                )
-        except anyio.BrokenResourceError:
-            logger.info("Client disconnected")
+                    )
+                # Return empty response once stream closes
+                await Response()(scope, receive, send)
+
+        self_server = self.server
+        sse_app = SseApp()
+
+        routes = [
+            Route("/sse", sse_app, methods=["GET"]),
+            Mount("/messages/", app=sse.handle_post_message),
+        ]
+
+        app = Starlette(routes=routes)
+        config = uvicorn.Config(app, host=host, port=port, log_level="info")
+        server = uvicorn.Server(config)
+
+        try:
+            logger.info("Starting Power BI MCP Server on %s:%s...", host, port)
+            await server.serve()
+            logger.info("Server run completed")
         except Exception as e:
             logger.error(f"Server error: {e}", exc_info=True)
         finally:
+            if persist:
+                logger.info("Entering idle loop to keep server running")
+                try:
+                    while True:
+                        await asyncio.sleep(3600)
+                except asyncio.CancelledError:
+                    pass
             logger.info("Server shutting down")
 
 
 # Main entry point
 async def main():
-    server = PowerBIMCPServer()
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--host", default=os.getenv("HOST", "0.0.0.0"))
+    parser.add_argument("--port", type=int, default=int(os.getenv("PORT", "8000")))
+    args = parser.parse_args()
+
+    server = PowerBIMCPServer(host=args.host, port=args.port)
     await server.run()
 
 if __name__ == "__main__":

@@ -38,6 +38,19 @@ ImportError: Could not load ADOMD.NET library. Please install SSMS or ADOMD.NET 
    C:\Program Files (x86)\Microsoft.NET\ADOMD.NET\160
    C:\Program Files (x86)\Microsoft.NET\ADOMD.NET\150
    ```
+### Microsoft.Identity.Client Missing
+
+**Error:**
+```
+FileNotFoundException: Could not load file or assembly 'Microsoft.Identity.Client, Version=4.6.0.0'
+```
+
+**Solutions:**
+1. **Install Recent ADOMD.NET** - version 19.12 or newer bundles this library
+2. **Verify `ADOMD_LIB_DIR`** - point it to the folder with `Microsoft.Identity.Client.dll`
+3. **Restart the MCP server** after installation
+4. **Use the provided Dockerfile** - the container now installs this library automatically
+
 
 ### MCP Framework Not Found
 
