@@ -330,7 +330,11 @@ class PowerBIConnector:
         id_cursor.execute(id_query)
         table_id_result = id_cursor.fetchone()
         id_cursor.close()
-        return table_id_result[0] if table_id_result else None
+        if not table_id_result:
+            return None
+        if not isinstance(table_id_result, (list, tuple)):
+            table_id_result = list(table_id_result)
+        return table_id_result[0]
 
     def get_table_descriptions(self) -> Dict[str, str]:
         """Return descriptions for all tables"""
@@ -344,7 +348,7 @@ class PowerBIConnector:
                 cursor.execute(
                     "SELECT [Name], [Description] FROM $SYSTEM.TMSCHEMA_TABLES"
                 )
-                rows = cursor.fetchall()
+                rows = list(cursor.fetchall())
                 cursor.close()
                 return {row[0]: row[1] or "" for row in rows}
         except Exception as e:
@@ -368,7 +372,7 @@ class PowerBIConnector:
                     f"WHERE [TableID] = {table_id}"
                 )
                 cursor.execute(query)
-                rows = cursor.fetchall()
+                rows = list(cursor.fetchall())
                 cursor.close()
                 return {row[0]: row[1] or "" for row in rows}
         except Exception as e:
@@ -389,7 +393,7 @@ class PowerBIConnector:
                 # Table map
                 t_cursor = conn.cursor()
                 t_cursor.execute("SELECT [ID], [Name] FROM $SYSTEM.TMSCHEMA_TABLES")
-                tables = {row[0]: row[1] for row in t_cursor.fetchall()}
+                tables = {row[0]: row[1] for row in list(t_cursor.fetchall())}
                 t_cursor.close()
 
                 # Column map
@@ -398,7 +402,8 @@ class PowerBIConnector:
                     "SELECT [ID], [TableID], [Name] FROM $SYSTEM.TMSCHEMA_COLUMNS"
                 )
                 cols = {
-                    row[0]: {"table_id": row[1], "name": row[2]} for row in c_cursor.fetchall()
+                    row[0]: {"table_id": row[1], "name": row[2]}
+                    for row in list(c_cursor.fetchall())
                 }
                 c_cursor.close()
 
@@ -407,7 +412,7 @@ class PowerBIConnector:
                     "SELECT [FromColumnID], [ToColumnID] FROM $SYSTEM.TMSCHEMA_RELATIONSHIPS"
                 )
                 relationships = []
-                for row in r_cursor.fetchall():
+                for row in list(r_cursor.fetchall()):
                     from_col = cols.get(row[0])
                     to_col = cols.get(row[1])
                     if not from_col or not to_col:
