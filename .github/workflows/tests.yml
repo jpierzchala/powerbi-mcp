@@ -55,11 +55,10 @@ jobs:
     - name: Run lint checks
       run: |
         # Install linting tools if they're not in requirements.txt
-        pip install flake8 black mypy || true
-        # Run flake8 with more relaxed rules for now
-        flake8 src/ tests/ --max-line-length=120 --ignore=E203,W503,W293,E402,F401,E722,E128,E129,E305,E302,E306,W291 --exclude=tests/test_integration.py || true
-        # Don't fail on formatting issues for now
-        echo "Linting completed"
+        pip install flake8 black isort || true
+        # Run flake8 with our configuration
+        flake8 src/ tests/ --config=.flake8
+        echo "Linting completed successfully"
 
   integration-tests:
     runs-on: ubuntu-latest
@@ -115,6 +114,42 @@ jobs:
       run: |
         echo "🚀 Running integration tests..."
         python run_integration_tests.py --yes
+
+  super-linter:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Setup Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: "3.10"
+    
+    - name: Install Python dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install flake8 black isort
+    
+    - name: Run Super-Linter
+      uses: github/super-linter/slim@v4
+      env:
+        DEFAULT_BRANCH: main
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        VALIDATE_ALL_CODEBASE: true
+        VALIDATE_PYTHON_FLAKE8: true
+        VALIDATE_PYTHON_BLACK: true
+        VALIDATE_PYTHON_ISORT: true
+        VALIDATE_GITHUB_ACTIONS: true
+        VALIDATE_YAML: true
+        VALIDATE_MARKDOWN: true
+        VALIDATE_DOCKERFILE: true
+        VALIDATE_BASH: true
+        VALIDATE_JSON: true
+        VALIDATE_XML: true
+        PYTHON_FLAKE8_CONFIG_FILE: .flake8
+        PYTHON_BLACK_CONFIG_FILE: pyproject.toml
+        PYTHON_ISORT_CONFIG_FILE: pyproject.toml
+        FILTER_REGEX_EXCLUDE: '.*test_integration\.py$'
 
   security-scan:
     runs-on: ubuntu-latest

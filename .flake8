@@ -1,0 +1,35 @@
+[flake8]
+max-line-length = 120
+max-complexity = 20
+ignore = 
+    # E203: whitespace before ':' (conflicts with black)
+    E203,
+    # W503: line break before binary operator (conflicts with black)
+    W503,
+    # E501: line too long (handled by black)
+    E501,
+    # F401: imported but unused (some imports are for type checking)
+    F401,
+    # E402: module level import not at top of file (needed for path manipulation)
+    E402,
+    # W293: blank line contains whitespace (black handles this)
+    W293,
+    # E722: do not use bare except (sometimes needed for broad error handling)
+    E722,
+    # F811: redefinition of unused variable (TYPE_CHECKING pattern)
+    F811
+exclude = 
+    .git,
+    __pycache__,
+    .pytest_cache,
+    .venv,
+    venv,
+    .env,
+    build,
+    dist,
+    *.egg-info
+per-file-ignores =
+    # Test files can have longer lines and different import patterns
+    tests/*: E501, F401, E402, F811
+    # Init files often have unused imports
+    __init__.py: F401

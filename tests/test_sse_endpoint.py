@@ -1,10 +1,10 @@
 import os
+import subprocess
 import sys
 import time
-import subprocess
+
 import httpx
 import pytest
-
 from mcp.client.session import ClientSession
 from mcp.client.sse import sse_client
 
@@ -13,34 +13,39 @@ from mcp.client.sse import sse_client
 async def test_sse_list_tools():
     print("Starting SSE test...")
     start_time = time.time()
-    
+
     env = os.environ.copy()
     env.setdefault("MCP_PERSIST", "0")
     env.setdefault("PORT", "8133")
     # Speed up server startup for testing
     env.setdefault("PYTHONNET_RUNTIME", "coreclr")
     env.setdefault("SKIP_ADOMD_LOAD", "1")  # Skip ADOMD.NET loading if supported
-    
+
     print(f"Starting server process... ({time.time() - start_time:.2f}s)")
-    proc = subprocess.Popen([
-        sys.executable,
-        os.path.join("src", "server.py"),
-    ], stdout=subprocess.PIPE, stderr=subprocess.PIPE, env=env)
-    
+    proc = subprocess.Popen(
+        [
+            sys.executable,
+            os.path.join("src", "server.py"),
+        ],
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        env=env,
+    )
+
     try:
         print(f"Waiting for server to start... ({time.time() - start_time:.2f}s)")
         for i in range(40):  # Increase attempts to cover 20s startup time
             try:
-                response = httpx.get("http://127.0.0.1:8133/sse", timeout=0.5)  # Shorter timeout
-                print(f"Server responded on attempt {i+1} ({time.time() - start_time:.2f}s)")
+                httpx.get("http://127.0.0.1:8133/sse", timeout=0.5)  # Shorter timeout
+                print(f"Server responded on attempt {i + 1} ({time.time() - start_time:.2f}s)")
                 break
             except Exception as e:
                 if i < 5:  # Only print first few attempts to reduce noise
-                    print(f"Attempt {i+1} failed: {e} ({time.time() - start_time:.2f}s)")
+                    print(f"Attempt {i + 1} failed: {e} ({time.time() - start_time:.2f}s)")
                 time.sleep(0.5)  # 500ms between attempts
         else:
             print("Server failed to start within timeout")
-        
+
         print(f"Connecting to SSE... ({time.time() - start_time:.2f}s)")
         async with sse_client("http://127.0.0.1:8133/sse") as streams:
             print(f"Creating client session... ({time.time() - start_time:.2f}s)")

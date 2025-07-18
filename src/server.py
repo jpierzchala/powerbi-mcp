@@ -1,65 +1,72 @@
-import asyncio
 import argparse
+import asyncio
+import json
+import logging
+import os
+import re
+import sys
+import threading
+from concurrent.futures import ThreadPoolExecutor
+from datetime import date, datetime
+from decimal import Decimal
 from typing import Any, Dict, List, Optional
-from mcp.server import Server, NotificationOptions
+
+import anyio  # Needed for server run loop cleanup
+import openai
+import uvicorn
+from dotenv import load_dotenv
+from mcp.server import NotificationOptions, Server
 from mcp.server.models import InitializationOptions
 from mcp.server.sse import SseServerTransport
 from starlette.applications import Starlette
 from starlette.responses import Response
-from starlette.routing import Route, Mount
-import uvicorn
-import os
-from dotenv import load_dotenv
-import json
-from datetime import datetime, date
-from decimal import Decimal
-import sys
-import openai
-import re
-from concurrent.futures import ThreadPoolExecutor
-import threading
-import logging
-import anyio  # Needed for server run loop cleanup
+from starlette.routing import Mount, Route
 
 # Configure logging to stderr for MCP debugging
 logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-    stream=sys.stderr
+    level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s", stream=sys.stderr
 )
 logger = logging.getLogger(__name__)
 
 # Updated imports
 try:
-    from mcp.types import Tool, TextContent, Resource, Prompt
     from mcp.server.types import ToolResult
+    from mcp.types import Prompt, Resource, TextContent, Tool
 except ImportError:
-    from mcp.types import Tool, TextContent
+    from mcp.types import TextContent, Tool
+    # Define missing types as stubs if not available
+    Resource = None
+    Prompt = None
+
 
 # Custom JSON encoder for Power BI data types
 class PowerBIJSONEncoder(json.JSONEncoder):
     """Custom JSON encoder to handle Power BI data types"""
+
     def default(self, obj):
         if isinstance(obj, (datetime, date)):
             return obj.isoformat()
         elif isinstance(obj, Decimal):
             return float(obj)
-        elif hasattr(obj, '__dict__'):
+        elif hasattr(obj, "__dict__"):
             return str(obj)
         return super().default(obj)
+
 
 def safe_json_dumps(data, indent=2):
     """Safely serialize data containing datetime and other non-JSON types"""
     return json.dumps(data, indent=indent, cls=PowerBIJSONEncoder)
 
+
 def clean_dax_query(dax_query: str) -> str:
     """Remove HTML/XML tags and other artifacts from DAX queries"""
     # Remove HTML/XML tags like <oii>, </oii>, etc.
-    cleaned = re.sub(r'<[^>]+>', '', dax_query)
+    cleaned = re.sub(r"<[^>]+>", "", dax_query)
     # Collapse extra whitespace
-    cleaned = ' '.join(cleaned.split())
+    cleaned = " ".join(cleaned.split())
     return cleaned
-    
+
+
 # Load environment variables
 load_dotenv()
 
@@ -68,10 +75,14 @@ env_adomd = os.environ.get("ADOMD_LIB_DIR")
 
 # Try to use NuGet packages first (if available)
 user_nuget_path = os.path.expanduser(r"~\.nuget\packages")
-nuget_adomd_path = os.path.join(user_nuget_path, "microsoft.analysisservices.adomdclient.netcore.retail.amd64", "19.84.1", "lib", "netcoreapp3.0")
+nuget_adomd_path = os.path.join(
+    user_nuget_path, "microsoft.analysisservices.adomdclient.netcore.retail.amd64", "19.84.1", "lib", "netcoreapp3.0"
+)
 nuget_config_path = os.path.join(user_nuget_path, "system.configuration.configurationmanager", "9.0.7", "lib", "net8.0")
 nuget_identity_path = os.path.join(user_nuget_path, "microsoft.identity.client", "4.74.0", "lib", "net8.0")
-nuget_identity_abs_path = os.path.join(user_nuget_path, "microsoft.identitymodel.abstractions", "6.35.0", "lib", "net6.0")
+nuget_identity_abs_path = os.path.join(
+    user_nuget_path, "microsoft.identitymodel.abstractions", "6.35.0", "lib", "net6.0"
+)
 
 adomd_paths = [
     env_adomd,
@@ -93,10 +104,11 @@ for p in adomd_paths:
     if p and os.path.exists(p):
         sys.path.append(p)
 
-# Ensure pythonnet uses coreclr runtime (works on Linux) - MUST be done before importing clr
-import pythonnet
 import platform
 import sys
+
+# Ensure pythonnet uses coreclr runtime (works on Linux) - MUST be done before importing clr
+import pythonnet
 
 # Choose appropriate runtime based on platform
 if platform.system() == "Linux":
@@ -125,15 +137,18 @@ except Exception as e:  # pragma: no cover - best effort
 try:
     import clr  # type: ignore
     from pyadomd import Pyadomd  # type: ignore
+
     logger.debug("pythonnet and pyadomd imported successfully")
 except Exception as e:  # pragma: no cover - runtime environment dependent
     clr = None
     Pyadomd = None
     logger.warning("pyadomd not available: %s", e)
 
+
 # Placeholder for AdomdSchemaGuid if the assembly fails to load
 class _DummySchemaGuid:
     Tables = 0
+
 
 AdomdSchemaGuid = _DummySchemaGuid
 
@@ -142,9 +157,7 @@ adomd_loaded = False
 skip_adomd_load = os.environ.get("SKIP_ADOMD_LOAD", "0").lower() in ("1", "true", "yes")
 
 if clr and not skip_adomd_load:
-    logger.info(
-        "Searching for ADOMD.NET in: %s", ", ".join([p for p in adomd_paths if p])
-    )
+    logger.info("Searching for ADOMD.NET in: %s", ", ".join([p for p in adomd_paths if p]))
     for path in adomd_paths:
         if not path:
             continue
@@ -163,6 +176,7 @@ if clr and not skip_adomd_load:
     if adomd_loaded:
         try:
             from Microsoft.AnalysisServices.AdomdClient import AdomdSchemaGuid as _ASG
+
             globals()["AdomdSchemaGuid"] = _ASG
             logger.debug("ADOMD.NET types imported")
         except Exception as e:  # pragma: no cover - best effort
@@ -172,9 +186,7 @@ if not adomd_loaded:
     if skip_adomd_load:
         logger.info("ADOMD.NET loading skipped due to SKIP_ADOMD_LOAD environment variable")
     else:
-        logger.warning(
-            "ADOMD.NET library not found. Pyadomd functionality will be disabled."
-        )
+        logger.warning("ADOMD.NET library not found. Pyadomd functionality will be disabled.")
 
 
 class PowerBIConnector:
@@ -188,12 +200,11 @@ class PowerBIConnector:
 
     def _check_pyadomd(self):
         if Pyadomd is None:
-            raise Exception(
-                "Pyadomd library not available. Ensure .NET runtime and ADOMD.NET are installed"
-            )
-        
-    def connect(self, xmla_endpoint: str, tenant_id: str, client_id: str,
-                client_secret: str, initial_catalog: str) -> bool:
+            raise Exception("Pyadomd library not available. Ensure .NET runtime and ADOMD.NET are installed")
+
+    def connect(
+        self, xmla_endpoint: str, tenant_id: str, client_id: str, client_secret: str, initial_catalog: str
+    ) -> bool:
         """Establish connection to Power BI dataset"""
         self._check_pyadomd()
         self.connection_string = (
@@ -203,10 +214,10 @@ class PowerBIConnector:
             f"User ID=app:{client_id}@{tenant_id};"
             f"Password={client_secret};"
         )
-        
+
         try:
             # Test connection
-            with Pyadomd(self.connection_string) as conn:
+            with Pyadomd(self.connection_string):
                 self.connected = True
                 logger.info(f"Connected to Power BI dataset: {initial_catalog}")
                 # Don't discover tables during connection to speed up
@@ -215,73 +226,71 @@ class PowerBIConnector:
             self.connected = False
             logger.error(f"Connection failed: {str(e)}")
             raise Exception(f"Connection failed: {str(e)}")
-    
+
     def discover_tables(self) -> List[str]:
         """Discover all user-facing tables in the dataset"""
         if not self.connected:
             raise Exception("Not connected to Power BI")
 
         self._check_pyadomd()
-            
+
         # Return cached tables if already discovered
         if self.tables:
             return self.tables
-            
+
         tables_list = []
         try:
             with Pyadomd(self.connection_string) as pyadomd_conn:
                 adomd_connection = pyadomd_conn.conn
                 tables_dataset = adomd_connection.GetSchemaDataSet(AdomdSchemaGuid.Tables, None)
-                
+
                 tables_list_obj = getattr(tables_dataset, "Tables", None)
                 if tables_list_obj and len(tables_list_obj) > 0:
                     schema_table = tables_list_obj[0]
                     for row in schema_table.Rows:
                         table_name = row["TABLE_NAME"]
-                        if (not table_name.startswith("$") and 
-                            not table_name.startswith("DateTableTemplate_") and 
-                            not row["TABLE_SCHEMA"] == "$SYSTEM"):
+                        if (
+                            not table_name.startswith("$")
+                            and not table_name.startswith("DateTableTemplate_")
+                            and not row["TABLE_SCHEMA"] == "$SYSTEM"
+                        ):
                             tables_list.append(table_name)
-                            
+
             self.tables = tables_list
             logger.info(f"Discovered {len(tables_list)} tables")
             return tables_list
         except Exception as e:
             logger.error(f"Failed to discover tables: {str(e)}")
             raise Exception(f"Failed to discover tables: {str(e)}")
-    
+
     def get_table_schema(self, table_name: str) -> Dict[str, Any]:
         """Get schema information for a specific table"""
         if not self.connected:
             raise Exception("Not connected to Power BI")
 
         self._check_pyadomd()
-            
+
         try:
             with Pyadomd(self.connection_string) as conn:
                 cursor = conn.cursor()
-                
+
                 # Try to get column information
                 try:
                     dax_query = f"EVALUATE TOPN(1, '{table_name}')"
                     cursor.execute(dax_query)
                     columns = [desc[0] for desc in cursor.description]
                     cursor.close()
-                    
-                    return {
-                        "table_name": table_name,
-                        "type": "data_table",
-                        "columns": columns
-                    }
+
+                    return {"table_name": table_name, "type": "data_table", "columns": columns}
                 except:
                     # This might be a measure table
                     cursor.close()
                     return self.get_measures_for_table(table_name)
-                    
+
         except Exception as e:
             logger.error(f"Failed to get schema for table '{table_name}': {str(e)}")
             raise Exception(f"Failed to get schema for table '{table_name}': {str(e)}")
-    
+
     def get_measures_for_table(self, table_name: str) -> Dict[str, Any]:
         """Get measures for a measure table"""
         if not self.connected:
@@ -296,61 +305,61 @@ class PowerBIConnector:
                 id_cursor.execute(id_query)
                 table_id_result = id_cursor.fetchone()
                 id_cursor.close()
-                
+
                 if not table_id_result:
                     return {"table_name": table_name, "type": "unknown", "measures": []}
-                
+
                 table_id = table_id_result[0]
-                
+
                 # Get measures
                 measure_cursor = conn.cursor()
                 measure_query = f"SELECT [Name], [Expression] FROM $SYSTEM.TMSCHEMA_MEASURES WHERE [TableID] = {table_id} ORDER BY [Name]"
                 measure_cursor.execute(measure_query)
                 measures = measure_cursor.fetchall()
                 measure_cursor.close()
-                
+
                 return {
                     "table_name": table_name,
                     "type": "measure_table",
-                    "measures": [{"name": m[0], "dax": m[1]} for m in measures]
+                    "measures": [{"name": m[0], "dax": m[1]} for m in measures],
                 }
-                
+
         except Exception as e:
             logger.error(f"Failed to get measures for table '{table_name}': {str(e)}")
             return {"table_name": table_name, "type": "error", "error": str(e)}
-    
+
     def execute_dax_query(self, dax_query: str) -> List[Dict[str, Any]]:
         """Execute a DAX query and return results"""
         if not self.connected:
             raise Exception("Not connected to Power BI")
 
         self._check_pyadomd()
-            
+
         # Clean the DAX query
         cleaned_query = clean_dax_query(dax_query)
         logger.info(f"Executing DAX query: {cleaned_query}")
-            
+
         try:
             with Pyadomd(self.connection_string) as conn:
                 cursor = conn.cursor()
                 cursor.execute(cleaned_query)
-                
+
                 headers = [desc[0] for desc in cursor.description]
                 rows = cursor.fetchall()
                 cursor.close()
-                
+
                 # Convert to list of dictionaries
                 results = []
                 for row in rows:
                     results.append(dict(zip(headers, row)))
-                
+
                 logger.info(f"Query returned {len(results)} rows")
                 return results
-                
+
         except Exception as e:
             logger.error(f"DAX query failed: {str(e)}")
             raise Exception(f"DAX query failed: {str(e)}")
-    
+
     def get_sample_data(self, table_name: str, num_rows: int = 10) -> List[Dict[str, Any]]:
         """Get sample data from a table"""
         dax_query = f"EVALUATE TOPN({num_rows}, '{table_name}')"
@@ -360,21 +369,14 @@ class PowerBIConnector:
 class DataAnalyzer:
     def __init__(self, api_key: str):
         self.client = openai.OpenAI(api_key=api_key)
-        self.context = {
-            "tables": [],
-            "schemas": {},
-            "sample_data": {}
-        }
-    
-    def set_data_context(self, tables: List[str], schemas: Dict[str, Any], 
-                        sample_data: Dict[str, List[Dict[str, Any]]]):
+        self.context = {"tables": [], "schemas": {}, "sample_data": {}}
+
+    def set_data_context(
+        self, tables: List[str], schemas: Dict[str, Any], sample_data: Dict[str, List[Dict[str, Any]]]
+    ):
         """Set the data context for the analyzer"""
-        self.context = {
-            "tables": tables,
-            "schemas": schemas,
-            "sample_data": sample_data
-        }
-    
+        self.context = {"tables": tables, "schemas": schemas, "sample_data": sample_data}
+
     def generate_dax_query(self, user_question: str) -> str:
         """Generate a DAX query based on user question"""
         prompt = f"""
@@ -399,22 +401,24 @@ class DataAnalyzer:
         Example format:
         EVALUATE SUMMARIZE(Sales, Product[Category], "Total", SUM(Sales[Amount]))
         """
-        
+
         response = self.client.chat.completions.create(
             model="gpt-4o-mini",
             messages=[
-                {"role": "system", "content": "You are a DAX query expert. Generate only valid, clean DAX queries without any markup or formatting."},
-                {"role": "user", "content": prompt}
+                {
+                    "role": "system",
+                    "content": "You are a DAX query expert. Generate only valid, clean DAX queries without any markup or formatting.",
+                },
+                {"role": "user", "content": prompt},
             ],
-            temperature=0.1
+            temperature=0.1,
         )
-        
+
         query = response.choices[0].message.content.strip()
         # Clean any remaining artifacts
         return clean_dax_query(query)
-    
-    def interpret_results(self, user_question: str, query_results: List[Dict[str, Any]], 
-                         dax_query: str) -> str:
+
+    def interpret_results(self, user_question: str, query_results: List[Dict[str, Any]], dax_query: str) -> str:
         """Interpret query results and provide a natural language answer"""
         prompt = f"""
         You are a data analyst helping users understand their Power BI data.
@@ -430,18 +434,18 @@ class DataAnalyzer:
         Include relevant numbers and insights. Format the response in a user-friendly way.
         Do not use any HTML or XML markup in your response.
         """
-        
+
         response = self.client.chat.completions.create(
             model="gpt-4o-mini",
             messages=[
                 {"role": "system", "content": "You are a helpful data analyst providing insights from Power BI data."},
-                {"role": "user", "content": prompt}
+                {"role": "user", "content": prompt},
             ],
-            temperature=0.3
+            temperature=0.3,
         )
-        
+
         return response.choices[0].message.content
-    
+
     def suggest_questions(self) -> List[str]:
         """Suggest relevant questions based on available data"""
         prompt = f"""
@@ -453,23 +457,27 @@ class DataAnalyzer:
         Generate 5 diverse questions that would showcase different aspects of the data.
         Return only the questions as a JSON array.
         """
-        
+
         response = self.client.chat.completions.create(
             model="gpt-4o-mini",
             messages=[
                 {"role": "system", "content": "You are a data analyst suggesting interesting questions about data."},
-                {"role": "user", "content": prompt}
+                {"role": "user", "content": prompt},
             ],
-            temperature=0.7
+            temperature=0.7,
         )
-        
+
         try:
             questions = json.loads(response.choices[0].message.content)
             return questions
         except:
-            return ["What are the total sales?", "Show me the top 10 products", 
-                   "What is the trend over time?", "Which region has the highest revenue?",
-                   "What are the key metrics?"]
+            return [
+                "What are the total sales?",
+                "Show me the top 10 products",
+                "What is the trend over time?",
+                "Which region has the highest revenue?",
+                "What are the key metrics?",
+            ]
 
 
 class PowerBIMCPServer:
@@ -488,7 +496,7 @@ class PowerBIMCPServer:
     def _openai_enabled(self) -> bool:
         """Return True if OpenAI features are enabled"""
         return bool(os.getenv("OPENAI_API_KEY"))
-    
+
     def _setup_handlers(self):
         @self.server.list_tools()
         async def handle_list_tools() -> List[Tool]:
@@ -502,38 +510,37 @@ class PowerBIMCPServer:
                             "xmla_endpoint": {"type": "string", "description": "Power BI XMLA endpoint URL"},
                             "tenant_id": {"type": "string", "description": "Azure AD Tenant ID (optional)"},
                             "client_id": {"type": "string", "description": "Service Principal Client ID (optional)"},
-                            "client_secret": {"type": "string", "description": "Service Principal Client Secret (optional)"},
-                            "initial_catalog": {"type": "string", "description": "Dataset name"}
+                            "client_secret": {
+                                "type": "string",
+                                "description": "Service Principal Client Secret (optional)",
+                            },
+                            "initial_catalog": {"type": "string", "description": "Dataset name"},
                         },
-                        "required": ["xmla_endpoint", "initial_catalog"]
-                    }
+                        "required": ["xmla_endpoint", "initial_catalog"],
+                    },
                 ),
                 Tool(
                     name="list_tables",
                     description="List all available tables in the connected Power BI dataset",
-                    inputSchema={"type": "object", "properties": {}}
+                    inputSchema={"type": "object", "properties": {}},
                 ),
                 Tool(
                     name="get_table_info",
                     description="Get detailed information about a specific table",
                     inputSchema={
                         "type": "object",
-                        "properties": {
-                            "table_name": {"type": "string", "description": "Name of the table"}
-                        },
-                        "required": ["table_name"]
-                    }
+                        "properties": {"table_name": {"type": "string", "description": "Name of the table"}},
+                        "required": ["table_name"],
+                    },
                 ),
                 Tool(
                     name="execute_dax",
                     description="Execute a custom DAX query",
                     inputSchema={
                         "type": "object",
-                        "properties": {
-                            "dax_query": {"type": "string", "description": "DAX query to execute"}
-                        },
-                        "required": ["dax_query"]
-                    }
+                        "properties": {"dax_query": {"type": "string", "description": "DAX query to execute"}},
+                        "required": ["dax_query"],
+                    },
                 ),
             ]
 
@@ -547,36 +554,36 @@ class PowerBIMCPServer:
                             "properties": {
                                 "question": {"type": "string", "description": "Your question about the data"}
                             },
-                            "required": ["question"]
-                        }
+                            "required": ["question"],
+                        },
                     )
                 )
                 tools.append(
                     Tool(
                         name="suggest_questions",
                         description="Get suggestions for interesting questions to ask about the data",
-                        inputSchema={"type": "object", "properties": {}}
+                        inputSchema={"type": "object", "properties": {}},
                     )
                 )
 
             return tools
-        
+
         @self.server.list_resources()
-        async def handle_list_resources() -> List[Resource]:
+        async def handle_list_resources():
             """Return empty list of resources - stub implementation"""
             return []
-        
+
         @self.server.list_prompts()
-        async def handle_list_prompts() -> List[Prompt]:
+        async def handle_list_prompts():
             """Return empty list of prompts - stub implementation"""
             return []
-        
+
         @self.server.call_tool()
         async def handle_call_tool(name: str, arguments: Optional[Dict[str, Any]]) -> List[TextContent]:
             """Handle tool calls and return results as TextContent"""
             try:
                 logger.info(f"Handling tool call: {name}")
-                
+
                 if name == "connect_powerbi":
                     result = await self._handle_connect(arguments)
                 elif name == "list_tables":
@@ -598,14 +605,14 @@ class PowerBIMCPServer:
                 else:
                     logger.warning(f"Unknown tool: {name}")
                     return [TextContent(type="text", text=f"Unknown tool: {name}")]
-                
+
                 # Convert string result to TextContent
                 return [TextContent(type="text", text=result)]
-                
+
             except Exception as e:
                 logger.error(f"Error executing {name}: {str(e)}", exc_info=True)
                 return [TextContent(type="text", text=f"Error executing {name}: {str(e)}")]
-    
+
     async def _handle_connect(self, arguments: Dict[str, Any]) -> str:
         """Handle connection to Power BI"""
         try:
@@ -628,15 +635,13 @@ class PowerBIMCPServer:
                     tenant_id,
                     client_id,
                     client_secret,
-                    arguments["initial_catalog"]
+                    arguments["initial_catalog"],
                 )
-                
+
                 # Initialize the analyzer with OpenAI API key
                 api_key = os.getenv("OPENAI_API_KEY")
                 if not api_key:
-                    logger.warning(
-                        "OpenAI API key not provided - natural language features disabled"
-                    )
+                    logger.warning("OpenAI API key not provided - natural language features disabled")
                     self.analyzer = None
                 else:
                     self.analyzer = DataAnalyzer(api_key)
@@ -648,23 +653,21 @@ class PowerBIMCPServer:
                     asyncio.create_task(self._async_prepare_context())
 
                 return f"Successfully connected to Power BI dataset '{arguments['initial_catalog']}'. Discovering tables..."
-                
+
         except Exception as e:
             self.is_connected = False
             logger.error(f"Connection failed: {str(e)}")
             return f"Connection failed: {str(e)}"
-    
+
     async def _async_prepare_context(self):
         """Prepare data context asynchronously"""
         try:
             # Discover tables
-            tables = await asyncio.get_event_loop().run_in_executor(
-                None, self.connector.discover_tables
-            )
-            
+            tables = await asyncio.get_event_loop().run_in_executor(None, self.connector.discover_tables)
+
             schemas = {}
             sample_data = {}
-            
+
             # Get schemas for first 5 tables only to speed up
             for table in tables[:5]:
                 try:
@@ -672,7 +675,7 @@ class PowerBIMCPServer:
                         None, self.connector.get_table_schema, table
                     )
                     schemas[table] = schema
-                    
+
                     if schema["type"] == "data_table":
                         samples = await asyncio.get_event_loop().run_in_executor(
                             None, self.connector.get_sample_data, table, 3
@@ -680,52 +683,50 @@ class PowerBIMCPServer:
                         sample_data[table] = samples
                 except Exception as e:
                     logger.warning(f"Failed to get schema for table {table}: {e}")
-            
+
             if self.analyzer:
                 self.analyzer.set_data_context(tables, schemas, sample_data)
                 logger.info(f"Context prepared with {len(tables)} tables")
-            
+
         except Exception as e:
             logger.error(f"Failed to prepare context: {e}")
-    
+
     async def _handle_list_tables(self) -> str:
         """List all available tables"""
         if not self.is_connected:
             return "Not connected to Power BI. Please connect first using 'connect_powerbi'."
-        
+
         try:
-            tables = await asyncio.get_event_loop().run_in_executor(
-                None, self.connector.discover_tables
-            )
-            
+            tables = await asyncio.get_event_loop().run_in_executor(None, self.connector.discover_tables)
+
             if not tables:
                 return "No tables found in the dataset."
-            
+
             table_list = "\n".join([f"- {table}" for table in tables])
             return f"Available tables:\n{table_list}"
         except Exception as e:
             logger.error(f"Failed to list tables: {e}")
             return f"Error listing tables: {str(e)}"
-    
+
     async def _handle_get_table_info(self, arguments: Dict[str, Any]) -> str:
         """Get information about a specific table"""
         if not self.is_connected:
             return "Not connected to Power BI. Please connect first."
-        
+
         table_name = arguments.get("table_name")
         if not table_name:
             return "Please provide a table name."
-        
+
         try:
-            schema = await asyncio.get_event_loop().run_in_executor(
-                None, self.connector.get_table_schema, table_name
-            )
-            
+            schema = await asyncio.get_event_loop().run_in_executor(None, self.connector.get_table_schema, table_name)
+
             if schema["type"] == "data_table":
                 sample_data = await asyncio.get_event_loop().run_in_executor(
                     None, self.connector.get_sample_data, table_name, 5
                 )
-                result = f"Table: {table_name}\nType: Data Table\nColumns: {', '.join(schema['columns'])}\n\nSample data:\n"
+                result = (
+                    f"Table: {table_name}\nType: Data Table\nColumns: {', '.join(schema['columns'])}\n\nSample data:\n"
+                )
                 result += safe_json_dumps(sample_data, indent=2)
             elif schema["type"] == "measure_table":
                 result = f"Table: {table_name}\nType: Measure Table\nMeasures:\n"
@@ -733,89 +734,81 @@ class PowerBIMCPServer:
                     result += f"\n- {measure['name']}:\n  DAX: {measure['dax']}\n"
             else:
                 result = f"Table: {table_name}\nType: {schema['type']}"
-            
+
             return result
-            
+
         except Exception as e:
             logger.error(f"Error getting table info: {e}")
             return f"Error getting table info: {str(e)}"
-    
+
     async def _handle_query_data(self, arguments: Dict[str, Any]) -> str:
         """Handle natural language queries about data"""
         if not self.is_connected:
             return "Not connected to Power BI. Please connect first."
-        
+
         if not self.analyzer:
             return "Data analyzer not initialized."
-        
+
         question = arguments.get("question")
         if not question:
             return "Please provide a question."
-        
+
         try:
             # Generate DAX query
-            dax_query = await asyncio.get_event_loop().run_in_executor(
-                None, self.analyzer.generate_dax_query, question
-            )
-            
+            dax_query = await asyncio.get_event_loop().run_in_executor(None, self.analyzer.generate_dax_query, question)
+
             # Execute the query
-            results = await asyncio.get_event_loop().run_in_executor(
-                None, self.connector.execute_dax_query, dax_query
-            )
-            
+            results = await asyncio.get_event_loop().run_in_executor(None, self.connector.execute_dax_query, dax_query)
+
             # Interpret results
             interpretation = await asyncio.get_event_loop().run_in_executor(
                 None, self.analyzer.interpret_results, question, results, dax_query
             )
-            
+
             response = f"Question: {question}\n\nDAX Query:\n{dax_query}\n\nAnswer:\n{interpretation}"
-            
+
             return response
-            
+
         except Exception as e:
             logger.error(f"Error processing query: {e}")
             return f"Error processing query: {str(e)}"
-    
+
     async def _handle_execute_dax(self, arguments: Dict[str, Any]) -> str:
         """Execute a custom DAX query"""
         if not self.is_connected:
             return "Not connected to Power BI. Please connect first."
-        
+
         dax_query = arguments.get("dax_query")
         if not dax_query:
             return "Please provide a DAX query."
-        
+
         try:
-            results = await asyncio.get_event_loop().run_in_executor(
-                None, self.connector.execute_dax_query, dax_query
-            )
+            results = await asyncio.get_event_loop().run_in_executor(None, self.connector.execute_dax_query, dax_query)
             return safe_json_dumps(results, indent=2)
         except Exception as e:
             logger.error(f"DAX execution error: {e}")
             return f"DAX execution error: {str(e)}"
-    
+
     async def _handle_suggest_questions(self) -> str:
         """Suggest interesting questions about the data"""
         if not self.is_connected:
             return "Not connected to Power BI. Please connect first."
-        
+
         if not self.analyzer:
             return "Data analyzer not initialized. Please wait for tables to be discovered."
-        
+
         try:
-            questions = await asyncio.get_event_loop().run_in_executor(
-                None, self.analyzer.suggest_questions
-            )
+            questions = await asyncio.get_event_loop().run_in_executor(None, self.analyzer.suggest_questions)
             result = "Here are some questions you might want to ask:\n\n"
             for i, q in enumerate(questions, 1):
                 result += f"{i}. {q}\n"
-            
+
             return result
-            
+
         except Exception as e:
             logger.error(f"Error generating suggestions: {e}")
             return f"Error generating suggestions: {str(e)}"
-    
+
     async def run(self):
         """Run the MCP server over SSE"""
         persist = os.getenv("MCP_PERSIST", "1") != "0"
@@ -883,6 +876,7 @@ async def main():
 
     server = PowerBIMCPServer(host=args.host, port=args.port)
     await server.run()
+
 
 if __name__ == "__main__":
     try:
