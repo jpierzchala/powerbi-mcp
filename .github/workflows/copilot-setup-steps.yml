@@ -96,64 +96,75 @@ jobs:
           
           # Test Configuration (secrets - only needed if integration tests enabled)
           if [ "$ENABLE_INTEGRATION_TESTS" = "true" ]; then
-            if [ -n "${{ secrets.TEST_XMLA_ENDPOINT }}" ]; then
-              echo "TEST_XMLA_ENDPOINT=${{ secrets.TEST_XMLA_ENDPOINT }}" >> $GITHUB_ENV
+            echo "Configuring test environment variables..."
+            
+            TEST_XMLA_ENDPOINT="${{ secrets.TEST_XMLA_ENDPOINT }}"
+            if [ -n "$TEST_XMLA_ENDPOINT" ]; then
+              echo "TEST_XMLA_ENDPOINT=$TEST_XMLA_ENDPOINT" >> $GITHUB_ENV
               echo "✅ Test XMLA endpoint configured"
             else
               echo "⚠️ TEST_XMLA_ENDPOINT not configured (required for integration tests)"
             fi
             
-            if [ -n "${{ secrets.TEST_TENANT_ID }}" ]; then
-              echo "TEST_TENANT_ID=${{ secrets.TEST_TENANT_ID }}" >> $GITHUB_ENV
+            TEST_TENANT_ID="${{ secrets.TEST_TENANT_ID }}"
+            if [ -n "$TEST_TENANT_ID" ]; then
+              echo "TEST_TENANT_ID=$TEST_TENANT_ID" >> $GITHUB_ENV
               echo "✅ Test Tenant ID configured"
             else
               echo "⚠️ TEST_TENANT_ID not configured (required for integration tests)"
             fi
             
-            if [ -n "${{ secrets.TEST_CLIENT_ID }}" ]; then
-              echo "TEST_CLIENT_ID=${{ secrets.TEST_CLIENT_ID }}" >> $GITHUB_ENV
+            TEST_CLIENT_ID="${{ secrets.TEST_CLIENT_ID }}"
+            if [ -n "$TEST_CLIENT_ID" ]; then
+              echo "TEST_CLIENT_ID=$TEST_CLIENT_ID" >> $GITHUB_ENV
               echo "✅ Test Client ID configured"
             else
               echo "⚠️ TEST_CLIENT_ID not configured (required for integration tests)"
             fi
             
-            if [ -n "${{ secrets.TEST_CLIENT_SECRET }}" ]; then
-              echo "TEST_CLIENT_SECRET=${{ secrets.TEST_CLIENT_SECRET }}" >> $GITHUB_ENV
+            TEST_CLIENT_SECRET="${{ secrets.TEST_CLIENT_SECRET }}"
+            if [ -n "$TEST_CLIENT_SECRET" ]; then
+              echo "TEST_CLIENT_SECRET=$TEST_CLIENT_SECRET" >> $GITHUB_ENV
               echo "✅ Test Client Secret configured"
             else
               echo "⚠️ TEST_CLIENT_SECRET not configured (required for integration tests)"
             fi
             
-            if [ -n "${{ secrets.TEST_INITIAL_CATALOG }}" ]; then
-              echo "TEST_INITIAL_CATALOG=${{ secrets.TEST_INITIAL_CATALOG }}" >> $GITHUB_ENV
+            TEST_INITIAL_CATALOG="${{ secrets.TEST_INITIAL_CATALOG }}"
+            if [ -n "$TEST_INITIAL_CATALOG" ]; then
+              echo "TEST_INITIAL_CATALOG=$TEST_INITIAL_CATALOG" >> $GITHUB_ENV
               echo "✅ Test Initial Catalog configured"
             else
               echo "⚠️ TEST_INITIAL_CATALOG not configured (required for integration tests)"
             fi
             
-            if [ -n "${{ secrets.TEST_EXPECTED_TABLE }}" ]; then
-              echo "TEST_EXPECTED_TABLE=${{ secrets.TEST_EXPECTED_TABLE }}" >> $GITHUB_ENV
+            TEST_EXPECTED_TABLE="${{ secrets.TEST_EXPECTED_TABLE }}"
+            if [ -n "$TEST_EXPECTED_TABLE" ]; then
+              echo "TEST_EXPECTED_TABLE=$TEST_EXPECTED_TABLE" >> $GITHUB_ENV
               echo "✅ Test Expected Table configured"
             else
               echo "ℹ️ TEST_EXPECTED_TABLE not configured (optional)"
             fi
             
-            if [ -n "${{ secrets.TEST_EXPECTED_COLUMN }}" ]; then
-              echo "TEST_EXPECTED_COLUMN=${{ secrets.TEST_EXPECTED_COLUMN }}" >> $GITHUB_ENV
+            TEST_EXPECTED_COLUMN="${{ secrets.TEST_EXPECTED_COLUMN }}"
+            if [ -n "$TEST_EXPECTED_COLUMN" ]; then
+              echo "TEST_EXPECTED_COLUMN=$TEST_EXPECTED_COLUMN" >> $GITHUB_ENV
               echo "✅ Test Expected Column configured"
             else
               echo "ℹ️ TEST_EXPECTED_COLUMN not configured (optional)"
             fi
             
-            if [ -n "${{ secrets.TEST_DAX_QUERY }}" ]; then
-              echo "TEST_DAX_QUERY=${{ secrets.TEST_DAX_QUERY }}" >> $GITHUB_ENV
+            TEST_DAX_QUERY="${{ secrets.TEST_DAX_QUERY }}"
+            if [ -n "$TEST_DAX_QUERY" ]; then
+              echo "TEST_DAX_QUERY=$TEST_DAX_QUERY" >> $GITHUB_ENV
               echo "✅ Test DAX Query configured"
             else
               echo "ℹ️ TEST_DAX_QUERY not configured (optional)"
             fi
             
-            if [ -n "${{ secrets.TEST_MIN_TABLES_COUNT }}" ]; then
-              echo "TEST_MIN_TABLES_COUNT=${{ secrets.TEST_MIN_TABLES_COUNT }}" >> $GITHUB_ENV
+            TEST_MIN_TABLES_COUNT="${{ secrets.TEST_MIN_TABLES_COUNT }}"
+            if [ -n "$TEST_MIN_TABLES_COUNT" ]; then
+              echo "TEST_MIN_TABLES_COUNT=$TEST_MIN_TABLES_COUNT" >> $GITHUB_ENV
               echo "✅ Test Min Tables Count configured"
             else
               echo "ℹ️ TEST_MIN_TABLES_COUNT not configured (optional)"
