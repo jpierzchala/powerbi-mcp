@@ -51,7 +51,7 @@ jobs:
           # OpenAI Configuration (secrets)
           if [ -n "${{ secrets.OPENAI_API_KEY }}" ]; then
             echo "OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY }}" >> $GITHUB_ENV
-            echo "✅ OpenAI API key configured"
+            echo "SUCCESS: OpenAI API key configured"
           else
             echo "INFO: OpenAI API key not configured (optional)"
           fi
@@ -62,26 +62,26 @@ jobs:
             OPENAI_MODEL="gpt-4o-mini"
           fi
           echo "OPENAI_MODEL=$OPENAI_MODEL" >> $GITHUB_ENV
-          echo "✅ OpenAI model configured: $OPENAI_MODEL"
+          echo "SUCCESS: OpenAI model configured: $OPENAI_MODEL"
           
           # Power BI Credentials (secrets - optional)
           if [ -n "${{ secrets.DEFAULT_TENANT_ID }}" ]; then
             echo "DEFAULT_TENANT_ID=${{ secrets.DEFAULT_TENANT_ID }}" >> $GITHUB_ENV
-            echo "✅ Default Tenant ID configured"
+            echo "SUCCESS: Default Tenant ID configured"
           else
             echo "INFO: Default Tenant ID not configured (optional)"
           fi
           
           if [ -n "${{ secrets.DEFAULT_CLIENT_ID }}" ]; then
             echo "DEFAULT_CLIENT_ID=${{ secrets.DEFAULT_CLIENT_ID }}" >> $GITHUB_ENV
-            echo "✅ Default Client ID configured"
+            echo "SUCCESS: Default Client ID configured"
           else
             echo "INFO: Default Client ID not configured (optional)"
           fi
           
           if [ -n "${{ secrets.DEFAULT_CLIENT_SECRET }}" ]; then
             echo "DEFAULT_CLIENT_SECRET=${{ secrets.DEFAULT_CLIENT_SECRET }}" >> $GITHUB_ENV
-            echo "✅ Default Client Secret configured"
+            echo "SUCCESS: Default Client Secret configured"
           else
             echo "INFO: Default Client Secret not configured (optional)"
           fi
@@ -92,7 +92,7 @@ jobs:
             ENABLE_INTEGRATION_TESTS="false"
           fi
           echo "ENABLE_INTEGRATION_TESTS=$ENABLE_INTEGRATION_TESTS" >> $GITHUB_ENV
-          echo "✅ Integration tests enabled: $ENABLE_INTEGRATION_TESTS"
+          echo "SUCCESS: Integration tests enabled: $ENABLE_INTEGRATION_TESTS"
           
           # Test Configuration (secrets - only needed if integration tests enabled)
           if [ "$ENABLE_INTEGRATION_TESTS" = "true" ]; then
@@ -101,7 +101,7 @@ jobs:
             TEST_XMLA_ENDPOINT="${{ secrets.TEST_XMLA_ENDPOINT }}"
             if [ -n "$TEST_XMLA_ENDPOINT" ]; then
               echo "TEST_XMLA_ENDPOINT=$TEST_XMLA_ENDPOINT" >> $GITHUB_ENV
-              echo "✅ Test XMLA endpoint configured"
+              echo "SUCCESS: Test XMLA endpoint configured"
             else
               echo "WARNING: TEST_XMLA_ENDPOINT not configured (required for integration tests)"
             fi
@@ -109,7 +109,7 @@ jobs:
             TEST_TENANT_ID="${{ secrets.TEST_TENANT_ID }}"
             if [ -n "$TEST_TENANT_ID" ]; then
               echo "TEST_TENANT_ID=$TEST_TENANT_ID" >> $GITHUB_ENV
-              echo "✅ Test Tenant ID configured"
+              echo "SUCCESS: Test Tenant ID configured"
             else
               echo "WARNING: TEST_TENANT_ID not configured (required for integration tests)"
             fi
@@ -117,7 +117,7 @@ jobs:
             TEST_CLIENT_ID="${{ secrets.TEST_CLIENT_ID }}"
             if [ -n "$TEST_CLIENT_ID" ]; then
               echo "TEST_CLIENT_ID=$TEST_CLIENT_ID" >> $GITHUB_ENV
-              echo "✅ Test Client ID configured"
+              echo "SUCCESS: Test Client ID configured"
             else
               echo "WARNING: TEST_CLIENT_ID not configured (required for integration tests)"
             fi
@@ -125,7 +125,7 @@ jobs:
             TEST_CLIENT_SECRET="${{ secrets.TEST_CLIENT_SECRET }}"
             if [ -n "$TEST_CLIENT_SECRET" ]; then
               echo "TEST_CLIENT_SECRET=$TEST_CLIENT_SECRET" >> $GITHUB_ENV
-              echo "✅ Test Client Secret configured"
+              echo "SUCCESS: Test Client Secret configured"
             else
               echo "WARNING: TEST_CLIENT_SECRET not configured (required for integration tests)"
             fi
@@ -133,7 +133,7 @@ jobs:
             TEST_INITIAL_CATALOG="${{ secrets.TEST_INITIAL_CATALOG }}"
             if [ -n "$TEST_INITIAL_CATALOG" ]; then
               echo "TEST_INITIAL_CATALOG=$TEST_INITIAL_CATALOG" >> $GITHUB_ENV
-              echo "✅ Test Initial Catalog configured"
+              echo "SUCCESS: Test Initial Catalog configured"
             else
               echo "WARNING: TEST_INITIAL_CATALOG not configured (required for integration tests)"
             fi
@@ -141,7 +141,7 @@ jobs:
             TEST_EXPECTED_TABLE="${{ secrets.TEST_EXPECTED_TABLE }}"
             if [ -n "$TEST_EXPECTED_TABLE" ]; then
               echo "TEST_EXPECTED_TABLE=$TEST_EXPECTED_TABLE" >> $GITHUB_ENV
-              echo "✅ Test Expected Table configured"
+              echo "SUCCESS: Test Expected Table configured"
             else
               echo "INFO: TEST_EXPECTED_TABLE not configured (optional)"
             fi
@@ -149,7 +149,7 @@ jobs:
             TEST_EXPECTED_COLUMN="${{ secrets.TEST_EXPECTED_COLUMN }}"
             if [ -n "$TEST_EXPECTED_COLUMN" ]; then
               echo "TEST_EXPECTED_COLUMN=$TEST_EXPECTED_COLUMN" >> $GITHUB_ENV
-              echo "✅ Test Expected Column configured"
+              echo "SUCCESS: Test Expected Column configured"
             else
               echo "INFO: TEST_EXPECTED_COLUMN not configured (optional)"
             fi
@@ -157,7 +157,7 @@ jobs:
             TEST_DAX_QUERY="${{ secrets.TEST_DAX_QUERY }}"
             if [ -n "$TEST_DAX_QUERY" ]; then
               echo "TEST_DAX_QUERY=$TEST_DAX_QUERY" >> $GITHUB_ENV
-              echo "✅ Test DAX Query configured"
+              echo "SUCCESS: Test DAX Query configured"
             else
               echo "INFO: TEST_DAX_QUERY not configured (optional)"
             fi
@@ -165,7 +165,7 @@ jobs:
             TEST_MIN_TABLES_COUNT="${{ secrets.TEST_MIN_TABLES_COUNT }}"
             if [ -n "$TEST_MIN_TABLES_COUNT" ]; then
               echo "TEST_MIN_TABLES_COUNT=$TEST_MIN_TABLES_COUNT" >> $GITHUB_ENV
-              echo "✅ Test Min Tables Count configured"
+              echo "SUCCESS: Test Min Tables Count configured"
             else
               echo "INFO: TEST_MIN_TABLES_COUNT not configured (optional)"
             fi
@@ -179,9 +179,9 @@ jobs:
             LOG_LEVEL="INFO"
           fi
           echo "LOG_LEVEL=$LOG_LEVEL" >> $GITHUB_ENV
-          echo "✅ Log level configured: $LOG_LEVEL"
+          echo "SUCCESS: Log level configured: $LOG_LEVEL"
           
-          echo "✅ All environment variables configured from secrets and variables"
+          echo "SUCCESS: All environment variables configured from secrets and variables"
 
       - name: Configure .NET Environment Variables
         run: |
@@ -194,14 +194,14 @@ jobs:
             echo "ADOMD_LIB_DIR=$ADOMD_LIB_DIR" >> $GITHUB_ENV
             echo "ADOMD_LIB_PATH=$ADOMD_LIB_PATH" >> $GITHUB_ENV
             echo "$DOTNET_ROOT" >> $GITHUB_PATH
-            echo "✅ ADOMD environment configured"
+            echo "SUCCESS: ADOMD environment configured"
           else
             echo "Setting up basic .NET environment variables..."
             echo "DOTNET_ROOT=$HOME/.local/dotnet" >> $GITHUB_ENV
             echo "PYTHONNET_RUNTIME=coreclr" >> $GITHUB_ENV
             echo "ADOMD_LIB_DIR=$HOME/.local/lib/adomd/lib/netcoreapp3.0" >> $GITHUB_ENV
             echo "$HOME/.local/dotnet" >> $GITHUB_PATH
-            echo "✅ Basic .NET environment configured"
+            echo "SUCCESS: Basic .NET environment configured"
           fi
 
       - name: Test Environment Setup
@@ -236,27 +236,27 @@ jobs:
           
           try:
               import mcp
-              print('✅ MCP package available')
+              print('SUCCESS: MCP package available')
           except ImportError as e:
-              print(f'❌ MCP package issue: {e}')
+              print(f'ERROR: MCP package issue: {e}')
               
           try:
               import pyadomd
-              print('✅ pyadomd package available')
+              print('SUCCESS: pyadomd package available')
           except ImportError as e:
-              print(f'❌ pyadomd package issue: {e}')
+              print(f'ERROR: pyadomd package issue: {e}')
               
           try:
               import pythonnet
-              print('✅ pythonnet package available')
+              print('SUCCESS: pythonnet package available')
           except ImportError as e:
-              print(f'❌ pythonnet package issue: {e}')
+              print(f'ERROR: pythonnet package issue: {e}')
               
           try:
               import openai
-              print('✅ OpenAI package available')
+              print('SUCCESS: OpenAI package available')
           except ImportError as e:
-              print(f'❌ OpenAI package issue: {e}')
+              print(f'ERROR: OpenAI package issue: {e}')
           "
           
           echo "Testing server import..."
@@ -265,9 +265,9 @@ jobs:
           sys.path.insert(0, 'src')
           try:
               from server import PowerBIMCPServer
-              print('✅ PowerBI MCP Server can be imported')
+              print('SUCCESS: PowerBI MCP Server can be imported')
           except Exception as e:
-              print(f'❌ Server import issue: {e}')
+              print(f'ERROR: Server import issue: {e}')
           "
 
       - name: Setup Development Tools
@@ -283,7 +283,7 @@ jobs:
           # Test mypy type checking
           python -m mypy src/ || echo "Type checking issues found"
           
-          echo "✅ Development tools configured"
+          echo "SUCCESS: Development tools configured"
         continue-on-error: true
 
       - name: Run Unit Tests
