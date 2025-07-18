@@ -1,5 +1,5 @@
 # Power BI MCP Server - Make commands
-.PHONY: help test test-unit test-integration install clean lint format
+.PHONY: help test test-unit test-integration install clean lint format format-check quality-check
 
 # Default target
 help:
@@ -10,7 +10,9 @@ help:
 	@echo "  test-unit        Run unit tests only"
 	@echo "  test-integration Run integration tests (requires configuration)"
 	@echo "  lint             Run code linting"
-	@echo "  format           Format code with black"
+	@echo "  format           Format code with black and isort"
+	@echo "  format-check     Check if code is properly formatted"
+	@echo "  quality-check    Run all quality checks (format, lint, test)"
 	@echo "  clean            Clean cache and temporary files"
 	@echo "  run              Run the server in development mode"
 	@echo ""
@@ -23,6 +25,7 @@ help:
 # Install dependencies
 install:
 	pip install -r requirements.txt
+	pip install flake8 black isort
 
 # Run unit tests only
 test-unit:
@@ -42,12 +45,25 @@ test-integration-ci:
 
 # Run code linting
 lint:
-	flake8 src/ tests/ --max-line-length=100 --ignore=E203,W503
-	mypy src/ --ignore-missing-imports
+	flake8 src/ tests/ --config=.flake8
 
-# Format code
+# Format code automatically
 format:
-	black src/ tests/ --line-length=100
+	black src/ tests/ --line-length=120
+	isort src/ tests/ --profile=black
+
+# Check if code is properly formatted (CI-style check)
+format-check:
+	black --check --diff src/ tests/ --line-length=120
+	isort --check-only --diff src/ tests/ --profile=black
+
+# Run all quality checks (same as CI pipeline)
+quality-check: format-check lint
+	@echo "✅ All quality checks passed!"
+
+# Complete validation (format, lint, test)
+validate: format-check lint test-unit
+	@echo "✅ Full validation completed successfully!"
 
 # Clean cache and temporary files
 clean:

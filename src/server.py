@@ -34,6 +34,7 @@ try:
     from mcp.types import Prompt, Resource, TextContent, Tool
 except ImportError:
     from mcp.types import TextContent, Tool
+
     # Define missing types as stubs if not available
     Resource = None
     Prompt = None
