@@ -137,9 +137,11 @@ class _DummySchemaGuid:
 
 AdomdSchemaGuid = _DummySchemaGuid
 
-# Try to load ADOMD.NET assemblies if clr is available
+# Try to load ADOMD.NET assemblies if clr is available and not skipped
 adomd_loaded = False
-if clr:
+skip_adomd_load = os.environ.get("SKIP_ADOMD_LOAD", "0").lower() in ("1", "true", "yes")
+
+if clr and not skip_adomd_load:
     logger.info(
         "Searching for ADOMD.NET in: %s", ", ".join([p for p in adomd_paths if p])
     )
@@ -167,9 +169,12 @@ if clr:
             logger.warning("Failed to import AdomdSchemaGuid: %s", e)
 
 if not adomd_loaded:
-    logger.warning(
-        "ADOMD.NET library not found. Pyadomd functionality will be disabled."
-    )
+    if skip_adomd_load:
+        logger.info("ADOMD.NET loading skipped due to SKIP_ADOMD_LOAD environment variable")
+    else:
+        logger.warning(
+            "ADOMD.NET library not found. Pyadomd functionality will be disabled."
+        )
 
 
 class PowerBIConnector:

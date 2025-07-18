@@ -18,7 +18,7 @@ import asyncio
 import os
 import pytest
 import sys
-from typing import Dict, Any, List
+from typing import Dict, Any, List, TYPE_CHECKING, Generator
 from dotenv import load_dotenv
 
 # Load environment variables
@@ -30,6 +30,11 @@ integration_enabled = os.getenv("ENABLE_INTEGRATION_TESTS", "false").lower() == 
 # Add src to path
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
 
+# Import for type checking only
+if TYPE_CHECKING:
+    from server import PowerBIConnector, DataAnalyzer, PowerBIMCPServer
+
+# Runtime imports
 if integration_enabled:
     from server import PowerBIConnector, DataAnalyzer, PowerBIMCPServer
 
@@ -75,7 +80,7 @@ class TestPowerBIIntegration:
         return config
     
     @pytest.fixture(scope="class")
-    def connector(self, test_config) -> PowerBIConnector:
+    def connector(self, test_config) -> "Generator[PowerBIConnector, None, None]":
         """Create and connect a PowerBIConnector instance."""
         connector = PowerBIConnector()
         
