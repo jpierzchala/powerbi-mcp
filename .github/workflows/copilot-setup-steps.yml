@@ -94,12 +94,7 @@ jobs:
           echo "ENABLE_INTEGRATION_TESTS=$ENABLE_INTEGRATION_TESTS" >> $GITHUB_ENV
           echo "SUCCESS: Integration tests enabled: $ENABLE_INTEGRATION_TESTS"
           
-          # Debug: Show exact value and length
-          echo "DEBUG: ENABLE_INTEGRATION_TESTS value: '$ENABLE_INTEGRATION_TESTS'"
-          echo "DEBUG: ENABLE_INTEGRATION_TESTS length: ${#ENABLE_INTEGRATION_TESTS}"
-          
           # Test Configuration (secrets - only needed if integration tests enabled)
-          # Simplified comparison without complex transformations
           if [ "$ENABLE_INTEGRATION_TESTS" = "true" ]; then
             echo "Configuring test environment variables..."
             
