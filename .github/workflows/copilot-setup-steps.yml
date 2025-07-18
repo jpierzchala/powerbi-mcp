@@ -45,19 +45,37 @@ jobs:
           pip install --no-cache-dir -r requirements.txt
 
       - name: Configure Environment Variables from Secrets
+        env:
+          # All secrets as environment variables to handle multiline values properly
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          DEFAULT_TENANT_ID: ${{ secrets.DEFAULT_TENANT_ID }}
+          DEFAULT_CLIENT_ID: ${{ secrets.DEFAULT_CLIENT_ID }}
+          DEFAULT_CLIENT_SECRET: ${{ secrets.DEFAULT_CLIENT_SECRET }}
+          TEST_XMLA_ENDPOINT: ${{ secrets.TEST_XMLA_ENDPOINT }}
+          TEST_TENANT_ID: ${{ secrets.TEST_TENANT_ID }}
+          TEST_CLIENT_ID: ${{ secrets.TEST_CLIENT_ID }}
+          TEST_CLIENT_SECRET: ${{ secrets.TEST_CLIENT_SECRET }}
+          TEST_INITIAL_CATALOG: ${{ secrets.TEST_INITIAL_CATALOG }}
+          TEST_EXPECTED_TABLE: ${{ secrets.TEST_EXPECTED_TABLE }}
+          TEST_EXPECTED_COLUMN: ${{ secrets.TEST_EXPECTED_COLUMN }}
+          TEST_DAX_QUERY: ${{ secrets.TEST_DAX_QUERY }}
+          TEST_MIN_TABLES_COUNT: ${{ secrets.TEST_MIN_TABLES_COUNT }}
+          # Variables
+          OPENAI_MODEL: ${{ vars.OPENAI_MODEL }}
+          ENABLE_INTEGRATION_TESTS: ${{ vars.ENABLE_INTEGRATION_TESTS }}
+          LOG_LEVEL: ${{ vars.LOG_LEVEL }}
         run: |
           echo "Configuring environment variables from GitHub secrets and variables..."
           
           # OpenAI Configuration (secrets)
-          if [ -n "${{ secrets.OPENAI_API_KEY }}" ]; then
-            echo "OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY }}" >> $GITHUB_ENV
+          if [ -n "$OPENAI_API_KEY" ]; then
+            echo "OPENAI_API_KEY=$OPENAI_API_KEY" >> $GITHUB_ENV
             echo "SUCCESS: OpenAI API key configured"
           else
             echo "INFO: OpenAI API key not configured - optional"
           fi
           
           # OpenAI Model (variable, with default)
-          OPENAI_MODEL="${{ vars.OPENAI_MODEL }}"
           if [ -z "$OPENAI_MODEL" ]; then
             OPENAI_MODEL="gpt-4o-mini"
           fi
@@ -65,29 +83,28 @@ jobs:
           echo "SUCCESS: OpenAI model configured: $OPENAI_MODEL"
           
           # Power BI Credentials (secrets - optional)
-          if [ -n "${{ secrets.DEFAULT_TENANT_ID }}" ]; then
-            echo "DEFAULT_TENANT_ID=${{ secrets.DEFAULT_TENANT_ID }}" >> $GITHUB_ENV
+          if [ -n "$DEFAULT_TENANT_ID" ]; then
+            echo "DEFAULT_TENANT_ID=$DEFAULT_TENANT_ID" >> $GITHUB_ENV
             echo "SUCCESS: Default Tenant ID configured"
           else
             echo "INFO: Default Tenant ID not configured - optional"
           fi
           
-          if [ -n "${{ secrets.DEFAULT_CLIENT_ID }}" ]; then
-            echo "DEFAULT_CLIENT_ID=${{ secrets.DEFAULT_CLIENT_ID }}" >> $GITHUB_ENV
+          if [ -n "$DEFAULT_CLIENT_ID" ]; then
+            echo "DEFAULT_CLIENT_ID=$DEFAULT_CLIENT_ID" >> $GITHUB_ENV
             echo "SUCCESS: Default Client ID configured"
           else
             echo "INFO: Default Client ID not configured - optional"
           fi
           
-          if [ -n "${{ secrets.DEFAULT_CLIENT_SECRET }}" ]; then
-            echo "DEFAULT_CLIENT_SECRET=${{ secrets.DEFAULT_CLIENT_SECRET }}" >> $GITHUB_ENV
+          if [ -n "$DEFAULT_CLIENT_SECRET" ]; then
+            echo "DEFAULT_CLIENT_SECRET=$DEFAULT_CLIENT_SECRET" >> $GITHUB_ENV
             echo "SUCCESS: Default Client Secret configured"
           else
             echo "INFO: Default Client Secret not configured - optional"
           fi
           
           # Integration Tests Configuration (variable)
-          ENABLE_INTEGRATION_TESTS="${{ vars.ENABLE_INTEGRATION_TESTS }}"
           if [ -z "$ENABLE_INTEGRATION_TESTS" ]; then
             ENABLE_INTEGRATION_TESTS="false"
           fi
@@ -98,7 +115,6 @@ jobs:
           if [ "$ENABLE_INTEGRATION_TESTS" = "true" ]; then
             echo "Configuring test environment variables..."
             
-            TEST_XMLA_ENDPOINT="${{ secrets.TEST_XMLA_ENDPOINT }}"
             if [ -n "$TEST_XMLA_ENDPOINT" ]; then
               echo "TEST_XMLA_ENDPOINT=$TEST_XMLA_ENDPOINT" >> $GITHUB_ENV
               echo "SUCCESS: Test XMLA endpoint configured"
@@ -106,7 +122,6 @@ jobs:
               echo "WARNING: TEST_XMLA_ENDPOINT not configured - required for integration tests"
             fi
             
-            TEST_TENANT_ID="${{ secrets.TEST_TENANT_ID }}"
             if [ -n "$TEST_TENANT_ID" ]; then
               echo "TEST_TENANT_ID=$TEST_TENANT_ID" >> $GITHUB_ENV
               echo "SUCCESS: Test Tenant ID configured"
@@ -114,7 +129,6 @@ jobs:
               echo "WARNING: TEST_TENANT_ID not configured - required for integration tests"
             fi
             
-            TEST_CLIENT_ID="${{ secrets.TEST_CLIENT_ID }}"
             if [ -n "$TEST_CLIENT_ID" ]; then
               echo "TEST_CLIENT_ID=$TEST_CLIENT_ID" >> $GITHUB_ENV
               echo "SUCCESS: Test Client ID configured"
@@ -122,7 +136,6 @@ jobs:
               echo "WARNING: TEST_CLIENT_ID not configured - required for integration tests"
             fi
             
-            TEST_CLIENT_SECRET="${{ secrets.TEST_CLIENT_SECRET }}"
             if [ -n "$TEST_CLIENT_SECRET" ]; then
               echo "TEST_CLIENT_SECRET=$TEST_CLIENT_SECRET" >> $GITHUB_ENV
               echo "SUCCESS: Test Client Secret configured"
@@ -130,7 +143,6 @@ jobs:
               echo "WARNING: TEST_CLIENT_SECRET not configured - required for integration tests"
             fi
             
-            TEST_INITIAL_CATALOG="${{ secrets.TEST_INITIAL_CATALOG }}"
             if [ -n "$TEST_INITIAL_CATALOG" ]; then
               echo "TEST_INITIAL_CATALOG=$TEST_INITIAL_CATALOG" >> $GITHUB_ENV
               echo "SUCCESS: Test Initial Catalog configured"
@@ -138,7 +150,6 @@ jobs:
               echo "WARNING: TEST_INITIAL_CATALOG not configured - required for integration tests"
             fi
             
-            TEST_EXPECTED_TABLE="${{ secrets.TEST_EXPECTED_TABLE }}"
             if [ -n "$TEST_EXPECTED_TABLE" ]; then
               echo "TEST_EXPECTED_TABLE=$TEST_EXPECTED_TABLE" >> $GITHUB_ENV
               echo "SUCCESS: Test Expected Table configured"
@@ -146,7 +157,6 @@ jobs:
               echo "INFO: TEST_EXPECTED_TABLE not configured - optional"
             fi
             
-            TEST_EXPECTED_COLUMN="${{ secrets.TEST_EXPECTED_COLUMN }}"
             if [ -n "$TEST_EXPECTED_COLUMN" ]; then
               echo "TEST_EXPECTED_COLUMN=$TEST_EXPECTED_COLUMN" >> $GITHUB_ENV
               echo "SUCCESS: Test Expected Column configured"
@@ -154,15 +164,16 @@ jobs:
               echo "INFO: TEST_EXPECTED_COLUMN not configured - optional"
             fi
             
-            TEST_DAX_QUERY="${{ secrets.TEST_DAX_QUERY }}"
             if [ -n "$TEST_DAX_QUERY" ]; then
-              echo "TEST_DAX_QUERY=$TEST_DAX_QUERY" >> $GITHUB_ENV
+              # Use here-doc for multiline values
+              echo "TEST_DAX_QUERY<<EOF" >> "$GITHUB_ENV"
+              echo "$TEST_DAX_QUERY" >> "$GITHUB_ENV"
+              echo "EOF" >> "$GITHUB_ENV"
               echo "SUCCESS: Test DAX Query configured"
             else
               echo "INFO: TEST_DAX_QUERY not configured - optional"
             fi
             
-            TEST_MIN_TABLES_COUNT="${{ secrets.TEST_MIN_TABLES_COUNT }}"
             if [ -n "$TEST_MIN_TABLES_COUNT" ]; then
               echo "TEST_MIN_TABLES_COUNT=$TEST_MIN_TABLES_COUNT" >> $GITHUB_ENV
               echo "SUCCESS: Test Min Tables Count configured"
@@ -174,7 +185,6 @@ jobs:
           fi
           
           # Logging Configuration (variable, with default)
-          LOG_LEVEL="${{ vars.LOG_LEVEL }}"
           if [ -z "$LOG_LEVEL" ]; then
             LOG_LEVEL="INFO"
           fi
