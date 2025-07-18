@@ -290,7 +290,7 @@ class TestDataAnalyzerIntegration:
         return config
     
     @pytest.fixture(scope="class")
-    def analyzer_with_data(self, test_config) -> DataAnalyzer:
+    def analyzer_with_data(self, test_config) -> "DataAnalyzer":
         """Create DataAnalyzer with connected Power BI data context."""
         # Create and connect PowerBI connector
         connector = PowerBIConnector()
@@ -388,7 +388,7 @@ class TestMCPServerIntegration:
         return config
     
     @pytest.fixture(scope="class")
-    def mcp_server(self) -> PowerBIMCPServer:
+    def mcp_server(self) -> "PowerBIMCPServer":
         """Create MCP Server instance."""
         return PowerBIMCPServer(host="localhost", port=8001)
     
