@@ -39,12 +39,36 @@ def check_dotnet_runtime():
 def check_pyadomd():
     """Check if pyadomd can be imported"""
     try:
+        # Try to import pyadomd in a safe way
+        import sys
+        import os
+        
+        # On Linux, we need to set the runtime before importing
+        if sys.platform.startswith('linux'):
+            try:
+                import pythonnet
+                # Try to set a compatible runtime
+                pythonnet.set_runtime("coreclr")
+            except Exception:
+                # If we can't set coreclr, try mono
+                try:
+                    import pythonnet
+                    pythonnet.set_runtime("mono")
+                except Exception:
+                    print("⚠️  No compatible .NET runtime found")
+                    print("   pyadomd functionality will be disabled")
+                    return False
+        
         import pyadomd
         print("✅ pyadomd can be imported")
         return True
     except ImportError as e:
         print(f"⚠️  pyadomd import failed: {e}")
         print("   This is expected on non-Windows systems or without ADOMD.NET")
+        return False
+    except Exception as e:
+        print(f"⚠️  pyadomd check failed: {e}")
+        print("   This is expected on systems without proper .NET runtime")
         return False
 
 def check_pythonnet():

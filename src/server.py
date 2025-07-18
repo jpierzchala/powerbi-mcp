@@ -93,14 +93,32 @@ for p in adomd_paths:
     if p and os.path.exists(p):
         sys.path.append(p)
 
-# Ensure pythonnet uses coreclr runtime (works on Linux)
+# Ensure pythonnet uses coreclr runtime (works on Linux) - MUST be done before importing clr
 import pythonnet
-pythonnet_runtime = os.environ.get("PYTHONNET_RUNTIME", "coreclr")
-logger.info("Configuring pythonnet runtime: %s", pythonnet_runtime)
+import platform
+import sys
+
+# Choose appropriate runtime based on platform
+if platform.system() == "Linux":
+    pythonnet_runtime = os.environ.get("PYTHONNET_RUNTIME", "coreclr")
+else:
+    pythonnet_runtime = os.environ.get("PYTHONNET_RUNTIME", "netfx")
+
+logger.info("Configuring pythonnet runtime: %s for %s", pythonnet_runtime, platform.system())
 try:
     pythonnet.set_runtime(pythonnet_runtime)
 except Exception as e:  # pragma: no cover - best effort
     logger.warning("Failed to set pythonnet runtime: %s", e)
+    # Try alternative runtime
+    try:
+        if platform.system() == "Linux":
+            pythonnet.set_runtime("mono")
+            logger.info("Fallback to mono runtime")
+        else:
+            pythonnet.set_runtime("coreclr")
+            logger.info("Fallback to coreclr runtime")
+    except Exception as e2:  # pragma: no cover - best effort
+        logger.warning("Failed to set fallback runtime: %s", e2)
 
 # Attempt to import clr and pyadomd. These may be missing when ADOMD.NET is not
 # installed. We load the actual ADOMD.NET assembly later if possible.

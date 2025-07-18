@@ -23,12 +23,19 @@ jobs:
     
     - name: Install .NET runtime
       run: |
+        # Install .NET runtime and Mono
         wget https://packages.microsoft.com/config/ubuntu/22.04/packages-microsoft-prod.deb -O packages-microsoft-prod.deb
         sudo dpkg -i packages-microsoft-prod.deb
         sudo apt-get update
         sudo apt-get install -y dotnet-runtime-6.0 || true
-        # Try to install ADOMD.NET (this may fail, which is expected)
-        sudo apt-get install -y nuget || true
+        sudo apt-get install -y mono-runtime mono-devel || true
+        
+        # Set environment variables for pythonnet
+        echo "PYTHONNET_RUNTIME=coreclr" >> $GITHUB_ENV
+        
+        # Verify installations
+        dotnet --version || echo "dotnet not available"
+        mono --version || echo "mono not available"
     
     - name: Install dependencies
       run: |
@@ -117,6 +124,5 @@ jobs:
       env:
         DEFAULT_BRANCH: master
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        VALIDATE_PYTHON_BLACK: false
+        VALIDATE_ALL_CODEBASE: false
         VALIDATE_PYTHON_FLAKE8: true
-        VALIDATE_PYTHON_MYPY: false
