@@ -9,6 +9,20 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'src'))
 
 from server import PowerBIMCPServer
 
+@pytest.mark.unit 
+class TestPyadomdOptional:
+    """Test behavior when pyadomd is not available"""
+    
+    def test_server_initialization_without_pyadomd(self, monkeypatch):
+        """Test that server can be initialized even without pyadomd"""
+        # Mock pyadomd as None
+        monkeypatch.setattr('server.Pyadomd', None)
+        
+        # Should not raise an exception
+        server = PowerBIMCPServer()
+        assert server is not None
+        assert server.connector is not None
+
 @pytest.mark.unit
 @pytest.mark.asyncio
 async def test_connect_without_openai(monkeypatch):

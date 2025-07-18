@@ -30,9 +30,19 @@ A Model Context Protocol (MCP) server that enables AI assistants to interact wit
 
 ## 🚀 Quick Start
 
+### System Requirements & Platform Compatibility
+
+| Platform | Python | .NET Runtime | ADOMD.NET | Status |
+|----------|--------|--------------|-----------|--------|
+| Windows  | 3.10+  | ✅ Built-in    | ✅ Available | ✅ Full Support |
+| Linux    | 3.10+  | ✅ Available   | ⚠️ Docker only | ✅ Docker Support |
+| macOS    | 3.10+  | ✅ Available   | ❌ Not available | ❌ Not supported |
+
+**Note**: For Linux systems, use Docker to run the server with all dependencies included.
+
 ### Prerequisites
 
-- Python 3.8 or higher
+- Python 3.10 or higher (3.8+ may work but not officially supported)
 - Windows with ADOMD.NET **or** Docker on Linux (container includes the runtime)
 - SQL Server Management Studio (SSMS) or ADOMD.NET client libraries (Windows only)
 - Power BI Pro/Premium with XMLA endpoint enabled
@@ -295,6 +305,33 @@ We welcome contributions! Please see [CONTRIBUTING.md](CONTRIBUTING.md) for deta
 - **Query execution**: 1-5 seconds depending on complexity
 - **Token usage**: ~500-2000 tokens per query with GPT-4o-mini
 - **Cost**: ~$0.02-0.06 per day for typical usage
+
+## 🧪 Testing
+
+### Running Tests
+
+```bash
+# Check environment compatibility
+python scripts/check_test_environment.py
+
+# Run unit tests
+python -m pytest tests/ -k "not test_integration" -v
+
+# Run integration tests (requires .env configuration)
+python -m pytest tests/test_integration.py -v
+```
+
+### Test Environment Requirements
+
+- Python 3.10+ (recommended)
+- All dependencies from requirements.txt
+- For integration tests: valid Power BI connection credentials
+
+### Platform-Specific Testing
+
+- **Windows**: Full test suite supported
+- **Linux**: Unit tests only (use Docker for integration tests)
+- **macOS**: Unit tests only (limited support)
 
 ## 🐛 Troubleshooting
 

@@ -208,5 +208,52 @@ class TestErrorHandling:
         assert "DAX query failed" in str(exc_info.value)
 
 
+@pytest.mark.unit
+class TestPyadomdUnavailable:
+    """Test behavior when pyadomd is not available"""
+    
+    @patch('server.Pyadomd', None)
+    def test_pyadomd_unavailable_error(self):
+        """Test that proper error is raised when pyadomd is not available"""
+        connector = PowerBIConnector()
+        
+        with pytest.raises(Exception) as exc_info:
+            connector.connect("test_endpoint", "test_tenant", "test_client", "test_secret", "test_catalog")
+        
+        assert "Pyadomd library not available" in str(exc_info.value)
+    
+    @patch('server.Pyadomd', None)
+    def test_operations_fail_without_pyadomd(self):
+        """Test that operations fail gracefully without pyadomd"""
+        connector = PowerBIConnector()
+        
+        # Test connect
+        with pytest.raises(Exception) as exc_info:
+            connector.connect("test", "tenant", "client", "secret", "catalog")
+        assert "Pyadomd library not available" in str(exc_info.value)
+        
+        # Test discover_tables - should fail with connection error first
+        with pytest.raises(Exception) as exc_info:
+            connector.discover_tables()
+        assert "Not connected to Power BI" in str(exc_info.value)
+        
+        # Test execute_dax_query - should fail with connection error first
+        with pytest.raises(Exception) as exc_info:
+            connector.execute_dax_query("EVALUATE Sales")
+        assert "Not connected to Power BI" in str(exc_info.value)
+        
+        # Test with mocked connection to check pyadomd error
+        connector.connected = True
+        connector.connection_string = "mocked"
+        
+        with pytest.raises(Exception) as exc_info:
+            connector.discover_tables()
+        assert "Pyadomd library not available" in str(exc_info.value)
+        
+        with pytest.raises(Exception) as exc_info:
+            connector.execute_dax_query("EVALUATE Sales")
+        assert "Pyadomd library not available" in str(exc_info.value)
+
+
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])
