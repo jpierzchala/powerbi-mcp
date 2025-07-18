@@ -94,8 +94,16 @@ jobs:
           echo "ENABLE_INTEGRATION_TESTS=$ENABLE_INTEGRATION_TESTS" >> $GITHUB_ENV
           echo "SUCCESS: Integration tests enabled: $ENABLE_INTEGRATION_TESTS"
           
+          # Debug: Show exact value and length
+          echo "DEBUG: ENABLE_INTEGRATION_TESTS value: '$ENABLE_INTEGRATION_TESTS'"
+          echo "DEBUG: ENABLE_INTEGRATION_TESTS length: ${#ENABLE_INTEGRATION_TESTS}"
+          
           # Test Configuration (secrets - only needed if integration tests enabled)
-          if [ "$ENABLE_INTEGRATION_TESTS" = "true" ]; then
+          # Use case insensitive comparison and trim whitespace
+          ENABLE_INTEGRATION_TESTS_CLEAN=$(echo "$ENABLE_INTEGRATION_TESTS" | tr '[:upper:]' '[:lower:]' | tr -d '[:space:]')
+          echo "DEBUG: Cleaned value: '$ENABLE_INTEGRATION_TESTS_CLEAN'"
+          
+          if [ "$ENABLE_INTEGRATION_TESTS_CLEAN" = "true" ]; then
             echo "Configuring test environment variables..."
             
             TEST_XMLA_ENDPOINT="${{ secrets.TEST_XMLA_ENDPOINT }}"
