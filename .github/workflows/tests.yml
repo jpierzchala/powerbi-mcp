@@ -1,14 +1,27 @@
+# GitHub Actions CI/CD Pipeline
+# 
+# This workflow runs tests in the following scenarios:
+# 1. On Pull Requests - Full test suite including unit tests, linting, and security scans
+# 2. On Direct Push to main/master - Full test suite (but skips merge commits to avoid duplication)
+# 3. Integration tests run only on push to master branch (not on PR to avoid requiring secrets)
+#
+# The key benefit: Tests run once during PR review, and don't re-run unnecessarily after merge.
+
 name: Tests
 
 on:
-  push:
-    branches: [ main, master, develop ]
+  # Run on pull requests - this is where we do the main testing
   pull_request:
     branches: [ main, master, develop ]
+  # Run on direct pushes to main/master only if it's not a merge commit
+  push:
+    branches: [ main, master ]
 
 jobs:
   unit-tests:
     runs-on: ubuntu-latest
+    # Skip tests on merge commits to avoid double execution
+    if: github.event_name == 'pull_request' || (github.event_name == 'push' && !contains(github.event.head_commit.message, 'Merge pull request'))
     strategy:
       matrix:
         python-version: ["3.10", "3.11", "3.12"]
@@ -62,8 +75,8 @@ jobs:
 
   integration-tests:
     runs-on: ubuntu-latest
-    # Only run integration tests if secrets are available
-    if: github.event_name == 'push' && github.ref == 'refs/heads/master'
+    # Only run integration tests if secrets are available and skip merge commits
+    if: github.event_name == 'push' && github.ref == 'refs/heads/master' && !contains(github.event.head_commit.message, 'Merge pull request')
     needs: unit-tests
     
     steps:
@@ -117,6 +130,8 @@ jobs:
 
   super-linter:
     runs-on: ubuntu-latest
+    # Skip linting on merge commits to avoid double execution
+    if: github.event_name == 'pull_request' || (github.event_name == 'push' && !contains(github.event.head_commit.message, 'Merge pull request'))
     steps:
     - uses: actions/checkout@v4
     
@@ -153,6 +168,8 @@ jobs:
 
   security-scan:
     runs-on: ubuntu-latest
+    # Skip security scan on merge commits to avoid double execution
+    if: github.event_name == 'pull_request' || (github.event_name == 'push' && !contains(github.event.head_commit.message, 'Merge pull request'))
     steps:
     - uses: actions/checkout@v4
     
