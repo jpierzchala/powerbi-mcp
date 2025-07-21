@@ -264,6 +264,90 @@ class PowerBIConnector:
             logger.error(f"Failed to discover tables: {str(e)}")
             raise Exception(f"Failed to discover tables: {str(e)}")
 
+    def discover_tables_with_metadata(self) -> List[Dict[str, Any]]:
+        """Discover all user-facing tables with their descriptions and metadata"""
+        if not self.connected:
+            raise Exception("Not connected to Power BI")
+
+        self._check_pyadomd()
+
+        tables_metadata = []
+        try:
+            with Pyadomd(self.connection_string) as conn:
+                cursor = conn.cursor()
+
+                # Get tables with descriptions
+                tables_query = """
+                SELECT [ID], [Name], [Description]
+                FROM $SYSTEM.TMSCHEMA_TABLES
+                WHERE [Name] NOT LIKE '$%'
+                  AND [Name] NOT LIKE 'DateTableTemplate_%'
+                ORDER BY [Name]
+                """
+                cursor.execute(tables_query)
+                tables_data = cursor.fetchall()
+                cursor.close()
+
+                # Build tables metadata list
+                for table_row in tables_data:
+                    table_id, table_name, description = table_row
+                    tables_metadata.append({"id": table_id, "name": table_name, "description": description or ""})
+
+            logger.info(f"Discovered {len(tables_metadata)} tables with metadata")
+            return tables_metadata
+        except Exception as e:
+            logger.error(f"Failed to discover tables with metadata: {str(e)}")
+            raise Exception(f"Failed to discover tables with metadata: {str(e)}")
+
+    def get_relationships(self) -> List[Dict[str, Any]]:
+        """Get all relationships between tables in the model"""
+        if not self.connected:
+            raise Exception("Not connected to Power BI")
+
+        self._check_pyadomd()
+
+        relationships = []
+        try:
+            with Pyadomd(self.connection_string) as conn:
+                cursor = conn.cursor()
+
+                # Get relationships with table and column names
+                relationships_query = """
+                SELECT
+                    r.[Name] as RelationshipName,
+                    ft.[Name] as FromTable,
+                    fc.[Name] as FromColumn,
+                    tt.[Name] as ToTable,
+                    tc.[Name] as ToColumn
+                FROM $SYSTEM.TMSCHEMA_RELATIONSHIPS r
+                LEFT JOIN $SYSTEM.TMSCHEMA_TABLES ft ON r.[FromTableID] = ft.[ID]
+                LEFT JOIN $SYSTEM.TMSCHEMA_TABLES tt ON r.[ToTableID] = tt.[ID]
+                LEFT JOIN $SYSTEM.TMSCHEMA_COLUMNS fc ON r.[FromColumnID] = fc.[ID]
+                LEFT JOIN $SYSTEM.TMSCHEMA_COLUMNS tc ON r.[ToColumnID] = tc.[ID]
+                ORDER BY ft.[Name], tt.[Name]
+                """
+                cursor.execute(relationships_query)
+                relationships_data = cursor.fetchall()
+                cursor.close()
+
+                for rel_row in relationships_data:
+                    rel_name, from_table, from_column, to_table, to_column = rel_row
+                    relationships.append(
+                        {
+                            "name": rel_name or "",
+                            "from_table": from_table or "",
+                            "from_column": from_column or "",
+                            "to_table": to_table or "",
+                            "to_column": to_column or "",
+                        }
+                    )
+
+            logger.info(f"Found {len(relationships)} relationships")
+            return relationships
+        except Exception as e:
+            logger.error(f"Failed to get relationships: {str(e)}")
+            raise Exception(f"Failed to get relationships: {str(e)}")
+
     def get_table_schema(self, table_name: str) -> Dict[str, Any]:
         """Get schema information for a specific table"""
         if not self.connected:
@@ -291,6 +375,130 @@ class PowerBIConnector:
         except Exception as e:
             logger.error(f"Failed to get schema for table '{table_name}': {str(e)}")
             raise Exception(f"Failed to get schema for table '{table_name}': {str(e)}")
+
+    def get_table_schema_with_metadata(self, table_name: str) -> Dict[str, Any]:
+        """Get enhanced schema information for a specific table including descriptions and relationships"""
+        if not self.connected:
+            raise Exception("Not connected to Power BI")
+
+        self._check_pyadomd()
+
+        try:
+            with Pyadomd(self.connection_string) as conn:
+                cursor = conn.cursor()
+
+                # Get table ID and description
+                table_query = f"SELECT [ID], [Description] FROM $SYSTEM.TMSCHEMA_TABLES WHERE [Name] = '{table_name}'"
+                cursor.execute(table_query)
+                table_info = cursor.fetchone()
+                cursor.close()
+
+                if not table_info:
+                    return {"table_name": table_name, "type": "not_found", "error": "Table not found"}
+
+                table_id, table_description = table_info
+
+                # Try to get column information with descriptions
+                try:
+                    # First try to get columns to determine if it's a data table
+                    cursor = conn.cursor()
+                    dax_query = f"EVALUATE TOPN(1, '{table_name}')"
+                    cursor.execute(dax_query)
+                    columns = [desc[0] for desc in cursor.description]
+                    cursor.close()
+
+                    # Get column descriptions
+                    cursor = conn.cursor()
+                    columns_query = f"""
+                    SELECT [Name], [Description]
+                    FROM $SYSTEM.TMSCHEMA_COLUMNS
+                    WHERE [TableID] = {table_id}
+                    ORDER BY [Name]
+                    """
+                    cursor.execute(columns_query)
+                    columns_data = cursor.fetchall()
+                    cursor.close()
+
+                    # Build columns with descriptions
+                    columns_with_desc = []
+                    columns_dict = {col_name: col_desc or "" for col_name, col_desc in columns_data}
+
+                    for col in columns:
+                        columns_with_desc.append({"name": col, "description": columns_dict.get(col, "")})
+
+                    # Get table relationships
+                    relationships = self.get_table_relationships(table_name)
+
+                    return {
+                        "table_name": table_name,
+                        "type": "data_table",
+                        "description": table_description or "",
+                        "columns": columns_with_desc,
+                        "relationships": relationships,
+                    }
+
+                except:
+                    # This might be a measure table
+                    measures_result = self.get_measures_for_table(table_name)
+
+                    # Add description and relationships to measure table
+                    measures_result["description"] = table_description or ""
+                    measures_result["relationships"] = self.get_table_relationships(table_name)
+
+                    return measures_result
+
+        except Exception as e:
+            logger.error(f"Failed to get enhanced schema for table '{table_name}': {str(e)}")
+            raise Exception(f"Failed to get enhanced schema for table '{table_name}': {str(e)}")
+
+    def get_table_relationships(self, table_name: str) -> List[Dict[str, Any]]:
+        """Get relationships for a specific table"""
+        if not self.connected:
+            raise Exception("Not connected to Power BI")
+
+        self._check_pyadomd()
+
+        relationships = []
+        try:
+            with Pyadomd(self.connection_string) as conn:
+                cursor = conn.cursor()
+
+                # Get relationships where this table is involved (either as from or to table)
+                relationships_query = f"""
+                SELECT
+                    r.[Name] as RelationshipName,
+                    ft.[Name] as FromTable,
+                    fc.[Name] as FromColumn,
+                    tt.[Name] as ToTable,
+                    tc.[Name] as ToColumn
+                FROM $SYSTEM.TMSCHEMA_RELATIONSHIPS r
+                LEFT JOIN $SYSTEM.TMSCHEMA_TABLES ft ON r.[FromTableID] = ft.[ID]
+                LEFT JOIN $SYSTEM.TMSCHEMA_TABLES tt ON r.[ToTableID] = tt.[ID]
+                LEFT JOIN $SYSTEM.TMSCHEMA_COLUMNS fc ON r.[FromColumnID] = fc.[ID]
+                LEFT JOIN $SYSTEM.TMSCHEMA_COLUMNS tc ON r.[ToColumnID] = tc.[ID]
+                WHERE ft.[Name] = '{table_name}' OR tt.[Name] = '{table_name}'
+                ORDER BY ft.[Name], tt.[Name]
+                """
+                cursor.execute(relationships_query)
+                relationships_data = cursor.fetchall()
+                cursor.close()
+
+                for rel_row in relationships_data:
+                    rel_name, from_table, from_column, to_table, to_column = rel_row
+                    relationships.append(
+                        {
+                            "name": rel_name or "",
+                            "from_table": from_table or "",
+                            "from_column": from_column or "",
+                            "to_table": to_table or "",
+                            "to_column": to_column or "",
+                        }
+                    )
+
+            return relationships
+        except Exception as e:
+            logger.error(f"Failed to get relationships for table '{table_name}': {str(e)}")
+            return []
 
     def get_measures_for_table(self, table_name: str) -> Dict[str, Any]:
         """Get measures for a measure table"""
@@ -663,54 +871,72 @@ class PowerBIMCPServer:
     async def _async_prepare_context(self):
         """Prepare data context asynchronously"""
         try:
-            # Discover tables
-            tables = await asyncio.get_event_loop().run_in_executor(None, self.connector.discover_tables)
+            # Discover tables with metadata
+            tables_metadata = await asyncio.get_event_loop().run_in_executor(
+                None, self.connector.discover_tables_with_metadata
+            )
+
+            # Extract just table names for backward compatibility
+            tables = [table["name"] for table in tables_metadata]
 
             schemas = {}
             sample_data = {}
 
-            # Get schemas for first 5 tables only to speed up
-            for table in tables[:5]:
+            # Get enhanced schemas for first 5 tables only to speed up
+            for table_meta in tables_metadata[:5]:
+                table_name = table_meta["name"]
                 try:
                     schema = await asyncio.get_event_loop().run_in_executor(
-                        None, self.connector.get_table_schema, table
+                        None, self.connector.get_table_schema_with_metadata, table_name
                     )
-                    schemas[table] = schema
+                    schemas[table_name] = schema
 
                     if schema["type"] == "data_table":
                         samples = await asyncio.get_event_loop().run_in_executor(
-                            None, self.connector.get_sample_data, table, 3
+                            None, self.connector.get_sample_data, table_name, 3
                         )
-                        sample_data[table] = samples
+                        sample_data[table_name] = samples
                 except Exception as e:
-                    logger.warning(f"Failed to get schema for table {table}: {e}")
+                    logger.warning(f"Failed to get enhanced schema for table {table_name}: {e}")
 
             if self.analyzer:
                 self.analyzer.set_data_context(tables, schemas, sample_data)
-                logger.info(f"Context prepared with {len(tables)} tables")
+                logger.info(f"Context prepared with {len(tables)} tables and enhanced metadata")
 
         except Exception as e:
             logger.error(f"Failed to prepare context: {e}")
 
     async def _handle_list_tables(self) -> str:
-        """List all available tables"""
+        """List all available tables with metadata"""
         if not self.is_connected:
             return "Not connected to Power BI. Please connect first using 'connect_powerbi'."
 
         try:
-            tables = await asyncio.get_event_loop().run_in_executor(None, self.connector.discover_tables)
+            # Get tables with metadata
+            tables_metadata = await asyncio.get_event_loop().run_in_executor(
+                None, self.connector.discover_tables_with_metadata
+            )
 
-            if not tables:
+            if not tables_metadata:
                 return "No tables found in the dataset."
 
-            table_list = "\n".join([f"- {table}" for table in tables])
-            return f"Available tables:\n{table_list}"
+            # Get relationships
+            relationships = await asyncio.get_event_loop().run_in_executor(None, self.connector.get_relationships)
+
+            # Build enhanced response
+            response = {
+                "tables": tables_metadata,
+                "relationships": relationships,
+                "summary": {"total_tables": len(tables_metadata), "total_relationships": len(relationships)},
+            }
+
+            return safe_json_dumps(response, indent=2)
         except Exception as e:
             logger.error(f"Failed to list tables: {e}")
             return f"Error listing tables: {str(e)}"
 
     async def _handle_get_table_info(self, arguments: Dict[str, Any]) -> str:
-        """Get information about a specific table"""
+        """Get enhanced information about a specific table"""
         if not self.is_connected:
             return "Not connected to Power BI. Please connect first."
 
@@ -719,24 +945,26 @@ class PowerBIMCPServer:
             return "Please provide a table name."
 
         try:
-            schema = await asyncio.get_event_loop().run_in_executor(None, self.connector.get_table_schema, table_name)
+            # Get enhanced schema with metadata
+            schema = await asyncio.get_event_loop().run_in_executor(
+                None, self.connector.get_table_schema_with_metadata, table_name
+            )
 
+            if schema.get("type") == "not_found":
+                return f"Table '{table_name}' not found."
+
+            # Add sample data for data tables
             if schema["type"] == "data_table":
-                sample_data = await asyncio.get_event_loop().run_in_executor(
-                    None, self.connector.get_sample_data, table_name, 5
-                )
-                result = (
-                    f"Table: {table_name}\nType: Data Table\nColumns: {', '.join(schema['columns'])}\n\nSample data:\n"
-                )
-                result += safe_json_dumps(sample_data, indent=2)
-            elif schema["type"] == "measure_table":
-                result = f"Table: {table_name}\nType: Measure Table\nMeasures:\n"
-                for measure in schema["measures"]:
-                    result += f"\n- {measure['name']}:\n  DAX: {measure['dax']}\n"
-            else:
-                result = f"Table: {table_name}\nType: {schema['type']}"
+                try:
+                    sample_data = await asyncio.get_event_loop().run_in_executor(
+                        None, self.connector.get_sample_data, table_name, 5
+                    )
+                    schema["sample_data"] = sample_data
+                except Exception as e:
+                    logger.warning(f"Failed to get sample data for {table_name}: {e}")
+                    schema["sample_data"] = []
 
-            return result
+            return safe_json_dumps(schema, indent=2)
 
         except Exception as e:
             logger.error(f"Error getting table info: {e}")

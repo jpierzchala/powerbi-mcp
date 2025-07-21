@@ -253,5 +253,188 @@ class TestPyadomdUnavailable:
         assert "Pyadomd library not available" in str(exc_info.value)
 
 
+@pytest.mark.unit
+class TestPowerBIConnectorMetadata:
+    """Test cases for enhanced metadata functionality"""
+
+    @pytest.fixture
+    def connector(self):
+        """Create a connected PowerBIConnector instance"""
+        connector = PowerBIConnector()
+        connector.connected = True
+        connector.connection_string = "mocked_connection"
+        return connector
+
+    @pytest.fixture
+    def mock_pyadomd(self):
+        """Mock pyadomd for testing"""
+        with patch("server.Pyadomd") as mock:
+            yield mock
+
+    def test_discover_tables_with_metadata(self, connector, mock_pyadomd):
+        """Test discovering tables with metadata"""
+        # Arrange
+        mock_cursor = MagicMock()
+        mock_conn = MagicMock()
+        mock_conn.cursor.return_value = mock_cursor
+        mock_pyadomd.return_value.__enter__.return_value = mock_conn
+
+        # Mock table data with descriptions
+        mock_cursor.fetchall.return_value = [
+            (1, "Sales", "Sales transactions table"),
+            (2, "Products", "Product information"),
+            (3, "Customers", None),  # Test None description
+        ]
+
+        # Act
+        result = connector.discover_tables_with_metadata()
+
+        # Assert
+        assert len(result) == 3
+        assert result[0]["name"] == "Sales"
+        assert result[0]["description"] == "Sales transactions table"
+        assert result[1]["name"] == "Products" 
+        assert result[1]["description"] == "Product information"
+        assert result[2]["name"] == "Customers"
+        assert result[2]["description"] == ""  # None converted to empty string
+
+        # Verify SQL query was executed
+        mock_cursor.execute.assert_called_once()
+        executed_query = mock_cursor.execute.call_args[0][0]
+        assert "$SYSTEM.TMSCHEMA_TABLES" in executed_query
+        assert "[Name] NOT LIKE '$%'" in executed_query
+
+    def test_get_relationships(self, connector, mock_pyadomd):
+        """Test getting relationships between tables"""
+        # Arrange
+        mock_cursor = MagicMock()
+        mock_conn = MagicMock()
+        mock_conn.cursor.return_value = mock_cursor
+        mock_pyadomd.return_value.__enter__.return_value = mock_conn
+
+        # Mock relationship data
+        mock_cursor.fetchall.return_value = [
+            ("Rel1", "Sales", "ProductID", "Products", "ID"),
+            ("Rel2", "Sales", "CustomerID", "Customers", "ID"),
+        ]
+
+        # Act
+        result = connector.get_relationships()
+
+        # Assert
+        assert len(result) == 2
+        assert result[0]["name"] == "Rel1"
+        assert result[0]["from_table"] == "Sales"
+        assert result[0]["from_column"] == "ProductID"
+        assert result[0]["to_table"] == "Products"
+        assert result[0]["to_column"] == "ID"
+
+        # Verify SQL query was executed
+        mock_cursor.execute.assert_called_once()
+        executed_query = mock_cursor.execute.call_args[0][0]
+        assert "$SYSTEM.TMSCHEMA_RELATIONSHIPS" in executed_query
+
+    def test_get_table_schema_with_metadata(self, connector, mock_pyadomd):
+        """Test getting table schema with enhanced metadata"""
+        # Arrange
+        mock_cursor = MagicMock()
+        mock_conn = MagicMock()
+        mock_conn.cursor.return_value = mock_cursor
+        mock_pyadomd.return_value.__enter__.return_value = mock_conn
+
+        # Mock table info
+        mock_cursor.fetchone.return_value = (1, "Sales table description")
+        
+        # Mock column data for DAX query
+        mock_cursor.description = [("ProductID",), ("Amount",), ("Date",)]
+        
+        # Mock column descriptions
+        mock_cursor.fetchall.side_effect = [
+            [("ProductID", "Product identifier"), ("Amount", "Sale amount"), ("Date", None)],  # columns
+            []  # relationships (empty for this table)
+        ]
+
+        # Act
+        result = connector.get_table_schema_with_metadata("Sales")
+
+        # Assert
+        assert result["table_name"] == "Sales"
+        assert result["type"] == "data_table"
+        assert result["description"] == "Sales table description"
+        assert len(result["columns"]) == 3
+        assert result["columns"][0]["name"] == "ProductID"
+        assert result["columns"][0]["description"] == "Product identifier"
+        assert result["columns"][2]["description"] == ""  # None converted to empty string
+        assert "relationships" in result
+
+    def test_get_table_relationships(self, connector, mock_pyadomd):
+        """Test getting relationships for a specific table"""
+        # Arrange
+        mock_cursor = MagicMock()
+        mock_conn = MagicMock()
+        mock_conn.cursor.return_value = mock_cursor
+        mock_pyadomd.return_value.__enter__.return_value = mock_conn
+
+        # Mock relationship data for specific table
+        mock_cursor.fetchall.return_value = [
+            ("Rel1", "Sales", "ProductID", "Products", "ID"),
+        ]
+
+        # Act
+        result = connector.get_table_relationships("Sales")
+
+        # Assert
+        assert len(result) == 1
+        assert result[0]["from_table"] == "Sales"
+        assert result[0]["to_table"] == "Products"
+
+        # Verify SQL query filters for the specific table
+        mock_cursor.execute.assert_called_once()
+        executed_query = mock_cursor.execute.call_args[0][0]
+        assert "WHERE ft.[Name] = 'Sales' OR tt.[Name] = 'Sales'" in executed_query
+
+    def test_error_handling_metadata_methods(self, connector, mock_pyadomd):
+        """Test error handling in metadata methods"""
+        # Arrange - simulate database error
+        mock_pyadomd.return_value.__enter__.side_effect = Exception("Database error")
+
+        # Test discover_tables_with_metadata error handling
+        with pytest.raises(Exception) as exc_info:
+            connector.discover_tables_with_metadata()
+        assert "Failed to discover tables with metadata" in str(exc_info.value)
+
+        # Test get_relationships error handling
+        with pytest.raises(Exception) as exc_info:
+            connector.get_relationships()
+        assert "Failed to get relationships" in str(exc_info.value)
+
+        # Test get_table_schema_with_metadata error handling  
+        with pytest.raises(Exception) as exc_info:
+            connector.get_table_schema_with_metadata("Sales")
+        assert "Failed to get enhanced schema for table 'Sales'" in str(exc_info.value)
+
+    def test_not_connected_error_metadata_methods(self, mock_pyadomd):
+        """Test that metadata methods fail when not connected"""
+        # Arrange
+        connector = PowerBIConnector()  # Not connected
+
+        # Test all new methods fail when not connected
+        with pytest.raises(Exception) as exc_info:
+            connector.discover_tables_with_metadata()
+        assert "Not connected to Power BI" in str(exc_info.value)
+
+        with pytest.raises(Exception) as exc_info:
+            connector.get_relationships()
+        assert "Not connected to Power BI" in str(exc_info.value)
+
+        with pytest.raises(Exception) as exc_info:
+            connector.get_table_schema_with_metadata("Sales")
+        assert "Not connected to Power BI" in str(exc_info.value)
+
+        with pytest.raises(Exception) as exc_info:
+            connector.get_table_relationships("Sales")
+        assert "Not connected to Power BI" in str(exc_info.value)
+
+
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])
