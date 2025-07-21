@@ -293,7 +293,7 @@ class TestPowerBIConnectorMetadata:
         assert len(result) == 3
         assert result[0]["name"] == "Sales"
         assert result[0]["description"] == "Sales transactions table"
-        assert result[1]["name"] == "Products" 
+        assert result[1]["name"] == "Products"
         assert result[1]["description"] == "Product information"
         assert result[2]["name"] == "Customers"
         assert result[2]["description"] == ""  # None converted to empty string
@@ -344,14 +344,14 @@ class TestPowerBIConnectorMetadata:
 
         # Mock table info
         mock_cursor.fetchone.return_value = (1, "Sales table description")
-        
+
         # Mock column data for DAX query
         mock_cursor.description = [("ProductID",), ("Amount",), ("Date",)]
-        
+
         # Mock column descriptions
         mock_cursor.fetchall.side_effect = [
             [("ProductID", "Product identifier"), ("Amount", "Sale amount"), ("Date", None)],  # columns
-            []  # relationships (empty for this table)
+            [],  # relationships (empty for this table)
         ]
 
         # Act
@@ -408,7 +408,7 @@ class TestPowerBIConnectorMetadata:
             connector.get_relationships()
         assert "Failed to get relationships" in str(exc_info.value)
 
-        # Test get_table_schema_with_metadata error handling  
+        # Test get_table_schema_with_metadata error handling
         with pytest.raises(Exception) as exc_info:
             connector.get_table_schema_with_metadata("Sales")
         assert "Failed to get enhanced schema for table 'Sales'" in str(exc_info.value)
