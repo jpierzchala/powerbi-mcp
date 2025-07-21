@@ -182,8 +182,20 @@ python -m pytest tests/test_integration.py::TestPowerBIIntegration -v
 **Solution 1 - Use Docker:**
 ```powershell
 docker build -t powerbi-mcp .
-docker run --rm -v ${PWD}\.env:/app/.env powerbi-mcp python run_integration_tests.py --yes
+docker run --rm \
+  -e ENABLE_INTEGRATION_TESTS=true \
+  -e TEST_XMLA_ENDPOINT=powerbi://api.powerbi.com/v1.0/myorg/YourTestWorkspace \
+  -e TEST_TENANT_ID=your-tenant-id \
+  -e TEST_CLIENT_ID=your-client-id \
+  -e TEST_CLIENT_SECRET=your-client-secret \
+  -e TEST_INITIAL_CATALOG=YourTestDatasetName \
+  -e TEST_EXPECTED_TABLE=Table1 \
+  -e TEST_EXPECTED_COLUMN=Amount \
+  -e OPENAI_API_KEY=your-openai-key \
+  powerbi-mcp python run_integration_tests.py --yes
 ```
+
+**Note**: Docker containers do not use `.env` files. Pass all configuration via environment variables as shown above.
 
 **Solution 2 - Install Framework ADOMD.NET:**
 1. Download and install [SQL Server 2022 Feature Pack](https://www.microsoft.com/en-us/download/details.aspx?id=104781)

@@ -1,0 +1,39 @@
+# Prevent environment files from being copied into Docker container
+.env
+.env.*
+.env.local
+.env.*.local
+
+# Development files
+.git
+.gitignore
+*.md
+!README.md
+
+# Python cache and build artifacts
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.pytest_cache/
+.mypy_cache/
+*.egg-info/
+build/
+dist/
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Documentation
+docs/
+*.gif
+
+# Test files
+tests/

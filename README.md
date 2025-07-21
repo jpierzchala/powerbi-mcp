@@ -97,31 +97,56 @@ Add to your Claude Desktop configuration file:
 
 ### Docker
 
+**⚠️ Important**: Docker containers do **NOT** use `.env` files. All configuration must be provided via environment variables or Docker secrets.
+
 Build the container image:
 ```bash
 docker build -t powerbi-mcp .
 ```
 
-Run the server:
+Run the server with required environment variables:
 ```bash
-docker run -it --rm -e OPENAI_API_KEY=<key> powerbi-mcp
+docker run -it --rm \
+  -e OPENAI_API_KEY=your_openai_key \
+  -e DEFAULT_TENANT_ID=your_tenant_id \
+  -e DEFAULT_CLIENT_ID=your_client_id \
+  -e DEFAULT_CLIENT_SECRET=your_client_secret \
+  powerbi-mcp
 ```
-The container listens on port `8000` by default. Override the host or port using
-environment variables or command-line arguments:
+
+The container listens on port `8000` by default. Override the host or port using environment variables or command-line arguments:
 ```bash
-docker run -it --rm -e OPENAI_API_KEY=<key> -p 7000:7000 powerbi-mcp \
+docker run -it --rm \
+  -e OPENAI_API_KEY=your_openai_key \
+  -e DEFAULT_TENANT_ID=your_tenant_id \
+  -e DEFAULT_CLIENT_ID=your_client_id \
+  -e DEFAULT_CLIENT_SECRET=your_client_secret \
+  -p 7000:7000 powerbi-mcp \
   python src/server.py --host 0.0.0.0 --port 7000
 ```
 
-The server exposes a Server-Sent Events endpoint at `/sse`. Clients should
-connect to this endpoint and then POST JSON-RPC messages to the path provided in
-the initial `endpoint` event (typically `/messages/`).
+For production deployments, use Docker secrets or environment files:
+```bash
+# Using an environment file (recommended for production)
+docker run -it --rm --env-file production.env powerbi-mcp
 
-The container includes the .NET runtime required by `pythonnet` and `pyadomd`.
-It sets `PYTHONNET_RUNTIME=coreclr` and `DOTNET_ROOT=/usr/share/dotnet` so the
-.NET runtime is detected automatically. Environment variables mirror those in
-`.env.example`; pass them with `-e VAR=value` or provide a `.env` file in the
-build context.
+# Using Docker secrets (recommended for orchestration)
+docker run -it --rm \
+  --secret openai_key \
+  --secret tenant_id \
+  --secret client_id \
+  --secret client_secret \
+  powerbi-mcp
+```
+
+The server exposes a Server-Sent Events endpoint at `/sse`. Clients should connect to this endpoint and then POST JSON-RPC messages to the path provided in the initial `endpoint` event (typically `/messages/`).
+
+The container includes the .NET runtime required by `pythonnet` and `pyadomd`. It sets `PYTHONNET_RUNTIME=coreclr` and `DOTNET_ROOT=/usr/share/dotnet` so the .NET runtime is detected automatically. 
+
+**Configuration Options**:
+- **Local Development**: Use `.env` file (not copied to Docker)
+- **Docker Containers**: Use `-e VAR=value`, `--env-file`, or Docker secrets
+- **All environment variables** from `.env.example` are supported
 
 ## 📖 Usage
 
@@ -170,7 +195,12 @@ Execute DAX: EVALUATE SUMMARIZE(Sales, Product[Category], "Total", SUM(Sales[Amo
 
 ### Environment Variables
 
-Create a `.env` file (OpenAI settings are optional):
+**📋 Configuration Methods by Environment:**
+- **Local Development**: Use `.env` file (recommended)
+- **Docker Containers**: Use environment variables only (`.env` files are ignored)
+- **Production**: Use secure environment variables or secrets management
+
+Create a `.env` file for local development (OpenAI settings are optional):
 
 ```env
 # OpenAI Configuration (optional)
