@@ -273,25 +273,30 @@ class PowerBIConnector:
 
         tables_metadata = []
         try:
-            with Pyadomd(self.connection_string) as conn:
-                cursor = conn.cursor()
+            with Pyadomd(self.connection_string) as pyadomd_conn:
+                adomd_connection = pyadomd_conn.conn
+                tables_dataset = adomd_connection.GetSchemaDataSet(AdomdSchemaGuid.Tables, None)
 
-                # Get tables with descriptions
-                tables_query = """
-                SELECT [ID], [Name], [Description]
-                FROM $SYSTEM.TMSCHEMA_TABLES
-                WHERE [Name] NOT LIKE '$%'
-                  AND [Name] NOT LIKE 'DateTableTemplate_%'
-                ORDER BY [Name]
-                """
-                cursor.execute(tables_query)
-                tables_data = cursor.fetchall()
-                cursor.close()
+                tables_list_obj = getattr(tables_dataset, "Tables", None)
+                if tables_list_obj and len(tables_list_obj) > 0:
+                    schema_table = tables_list_obj[0]
+                    table_id = 1
+                    for row in schema_table.Rows:
+                        table_name = row["TABLE_NAME"]
+                        if (
+                            not table_name.startswith("$")
+                            and not table_name.startswith("DateTableTemplate_")
+                            and not row["TABLE_SCHEMA"] == "$SYSTEM"
+                        ):
+                            # Try to get description, but don't fail if not available
+                            description = ""
+                            try:
+                                description = row.get("DESCRIPTION", "") or ""
+                            except:
+                                pass
 
-                # Build tables metadata list
-                for table_row in tables_data:
-                    table_id, table_name, description = table_row
-                    tables_metadata.append({"id": table_id, "name": table_name, "description": description or ""})
+                            tables_metadata.append({"id": table_id, "name": table_name, "description": description})
+                            table_id += 1
 
             logger.info(f"Discovered {len(tables_metadata)} tables with metadata")
             return tables_metadata
@@ -308,39 +313,31 @@ class PowerBIConnector:
 
         relationships = []
         try:
-            with Pyadomd(self.connection_string) as conn:
-                cursor = conn.cursor()
+            with Pyadomd(self.connection_string) as pyadomd_conn:
+                adomd_connection = pyadomd_conn.conn
 
-                # Get relationships with table and column names
-                relationships_query = """
-                SELECT
-                    r.[Name] as RelationshipName,
-                    ft.[Name] as FromTable,
-                    fc.[Name] as FromColumn,
-                    tt.[Name] as ToTable,
-                    tc.[Name] as ToColumn
-                FROM $SYSTEM.TMSCHEMA_RELATIONSHIPS r
-                LEFT JOIN $SYSTEM.TMSCHEMA_TABLES ft ON r.[FromTableID] = ft.[ID]
-                LEFT JOIN $SYSTEM.TMSCHEMA_TABLES tt ON r.[ToTableID] = tt.[ID]
-                LEFT JOIN $SYSTEM.TMSCHEMA_COLUMNS fc ON r.[FromColumnID] = fc.[ID]
-                LEFT JOIN $SYSTEM.TMSCHEMA_COLUMNS tc ON r.[ToColumnID] = tc.[ID]
-                ORDER BY ft.[Name], tt.[Name]
-                """
-                cursor.execute(relationships_query)
-                relationships_data = cursor.fetchall()
-                cursor.close()
-
-                for rel_row in relationships_data:
-                    rel_name, from_table, from_column, to_table, to_column = rel_row
-                    relationships.append(
-                        {
-                            "name": rel_name or "",
-                            "from_table": from_table or "",
-                            "from_column": from_column or "",
-                            "to_table": to_table or "",
-                            "to_column": to_column or "",
-                        }
+                # Try to get relationships using TabularRelationships schema
+                try:
+                    relationships_dataset = adomd_connection.GetSchemaDataSet(
+                        AdomdSchemaGuid.TabularRelationships, None
                     )
+
+                    relationships_list_obj = getattr(relationships_dataset, "Tables", None)
+                    if relationships_list_obj and len(relationships_list_obj) > 0:
+                        schema_table = relationships_list_obj[0]
+                        for row in schema_table.Rows:
+                            # Build relationship info from available columns
+                            rel_info = {
+                                "name": row.get("Name", "") or "",
+                                "from_table": row.get("FromTable", "") or "",
+                                "from_column": row.get("FromColumn", "") or "",
+                                "to_table": row.get("ToTable", "") or "",
+                                "to_column": row.get("ToColumn", "") or "",
+                            }
+                            relationships.append(rel_info)
+                except Exception as schema_error:
+                    logger.warning(f"Could not get relationships from TabularRelationships schema: {schema_error}")
+                    # Relationships might not be available in all environments
 
             logger.info(f"Found {len(relationships)} relationships")
             return relationships
@@ -384,68 +381,32 @@ class PowerBIConnector:
         self._check_pyadomd()
 
         try:
-            with Pyadomd(self.connection_string) as conn:
-                cursor = conn.cursor()
+            # First get the basic schema using the working method
+            basic_schema = self.get_table_schema(table_name)
 
-                # Get table ID and description
-                table_query = f"SELECT [ID], [Description] FROM $SYSTEM.TMSCHEMA_TABLES WHERE [Name] = '{table_name}'"
-                cursor.execute(table_query)
-                table_info = cursor.fetchone()
-                cursor.close()
+            # Enhance with metadata where possible
+            enhanced_schema = basic_schema.copy()
+            enhanced_schema["description"] = ""  # No description available via standard schema
 
-                if not table_info:
-                    return {"table_name": table_name, "type": "not_found", "error": "Table not found"}
+            # For data tables, enhance columns with empty descriptions
+            if basic_schema.get("type") == "data_table" and "columns" in basic_schema:
+                enhanced_columns = []
+                for col in basic_schema["columns"]:
+                    if isinstance(col, str):
+                        enhanced_columns.append({"name": col, "description": ""})
+                    else:
+                        enhanced_columns.append(col)
+                enhanced_schema["columns"] = enhanced_columns
 
-                table_id, table_description = table_info
+            # Get table relationships
+            try:
+                relationships = self.get_table_relationships(table_name)
+                enhanced_schema["relationships"] = relationships
+            except Exception as rel_error:
+                logger.warning(f"Could not get relationships for table {table_name}: {rel_error}")
+                enhanced_schema["relationships"] = []
 
-                # Try to get column information with descriptions
-                try:
-                    # First try to get columns to determine if it's a data table
-                    cursor = conn.cursor()
-                    dax_query = f"EVALUATE TOPN(1, '{table_name}')"
-                    cursor.execute(dax_query)
-                    columns = [desc[0] for desc in cursor.description]
-                    cursor.close()
-
-                    # Get column descriptions
-                    cursor = conn.cursor()
-                    columns_query = f"""
-                    SELECT [Name], [Description]
-                    FROM $SYSTEM.TMSCHEMA_COLUMNS
-                    WHERE [TableID] = {table_id}
-                    ORDER BY [Name]
-                    """
-                    cursor.execute(columns_query)
-                    columns_data = cursor.fetchall()
-                    cursor.close()
-
-                    # Build columns with descriptions
-                    columns_with_desc = []
-                    columns_dict = {col_name: col_desc or "" for col_name, col_desc in columns_data}
-
-                    for col in columns:
-                        columns_with_desc.append({"name": col, "description": columns_dict.get(col, "")})
-
-                    # Get table relationships
-                    relationships = self.get_table_relationships(table_name)
-
-                    return {
-                        "table_name": table_name,
-                        "type": "data_table",
-                        "description": table_description or "",
-                        "columns": columns_with_desc,
-                        "relationships": relationships,
-                    }
-
-                except:
-                    # This might be a measure table
-                    measures_result = self.get_measures_for_table(table_name)
-
-                    # Add description and relationships to measure table
-                    measures_result["description"] = table_description or ""
-                    measures_result["relationships"] = self.get_table_relationships(table_name)
-
-                    return measures_result
+            return enhanced_schema
 
         except Exception as e:
             logger.error(f"Failed to get enhanced schema for table '{table_name}': {str(e)}")
@@ -458,46 +419,18 @@ class PowerBIConnector:
 
         self._check_pyadomd()
 
-        relationships = []
+        # Get all relationships and filter for this table
         try:
-            with Pyadomd(self.connection_string) as conn:
-                cursor = conn.cursor()
+            all_relationships = self.get_relationships()
+            table_relationships = []
 
-                # Get relationships where this table is involved (either as from or to table)
-                relationships_query = f"""
-                SELECT
-                    r.[Name] as RelationshipName,
-                    ft.[Name] as FromTable,
-                    fc.[Name] as FromColumn,
-                    tt.[Name] as ToTable,
-                    tc.[Name] as ToColumn
-                FROM $SYSTEM.TMSCHEMA_RELATIONSHIPS r
-                LEFT JOIN $SYSTEM.TMSCHEMA_TABLES ft ON r.[FromTableID] = ft.[ID]
-                LEFT JOIN $SYSTEM.TMSCHEMA_TABLES tt ON r.[ToTableID] = tt.[ID]
-                LEFT JOIN $SYSTEM.TMSCHEMA_COLUMNS fc ON r.[FromColumnID] = fc.[ID]
-                LEFT JOIN $SYSTEM.TMSCHEMA_COLUMNS tc ON r.[ToColumnID] = tc.[ID]
-                WHERE ft.[Name] = '{table_name}' OR tt.[Name] = '{table_name}'
-                ORDER BY ft.[Name], tt.[Name]
-                """
-                cursor.execute(relationships_query)
-                relationships_data = cursor.fetchall()
-                cursor.close()
+            for rel in all_relationships:
+                if rel.get("from_table") == table_name or rel.get("to_table") == table_name:
+                    table_relationships.append(rel)
 
-                for rel_row in relationships_data:
-                    rel_name, from_table, from_column, to_table, to_column = rel_row
-                    relationships.append(
-                        {
-                            "name": rel_name or "",
-                            "from_table": from_table or "",
-                            "from_column": from_column or "",
-                            "to_table": to_table or "",
-                            "to_column": to_column or "",
-                        }
-                    )
-
-            return relationships
+            return table_relationships
         except Exception as e:
-            logger.error(f"Failed to get relationships for table '{table_name}': {str(e)}")
+            logger.warning(f"Could not get relationships for table {table_name}: {str(e)}")
             return []
 
     def get_measures_for_table(self, table_name: str) -> Dict[str, Any]:
@@ -506,33 +439,14 @@ class PowerBIConnector:
             raise Exception("Not connected to Power BI")
 
         self._check_pyadomd()
+
+        # Since we can't reliably access schema tables, return basic structure
         try:
-            with Pyadomd(self.connection_string) as conn:
-                # Get table ID
-                id_cursor = conn.cursor()
-                id_query = f"SELECT [ID] FROM $SYSTEM.TMSCHEMA_TABLES WHERE [Name] = '{table_name}'"
-                id_cursor.execute(id_query)
-                table_id_result = id_cursor.fetchone()
-                id_cursor.close()
-
-                if not table_id_result:
-                    return {"table_name": table_name, "type": "unknown", "measures": []}
-
-                table_id = table_id_result[0]
-
-                # Get measures
-                measure_cursor = conn.cursor()
-                measure_query = f"SELECT [Name], [Expression] FROM $SYSTEM.TMSCHEMA_MEASURES WHERE [TableID] = {table_id} ORDER BY [Name]"
-                measure_cursor.execute(measure_query)
-                measures = measure_cursor.fetchall()
-                measure_cursor.close()
-
-                return {
-                    "table_name": table_name,
-                    "type": "measure_table",
-                    "measures": [{"name": m[0], "dax": m[1]} for m in measures],
-                }
-
+            return {
+                "table_name": table_name,
+                "type": "measure_table",
+                "measures": [],  # Measures not available via standard ADOMD schema
+            }
         except Exception as e:
             logger.error(f"Failed to get measures for table '{table_name}': {str(e)}")
             return {"table_name": table_name, "type": "error", "error": str(e)}

@@ -54,6 +54,11 @@ This repository supports three distinct environments that must be kept consisten
 ## Testing Requirements
 - Always run `pytest -q` after changes.
 - For every new or modified feature, add or update tests to cover the change.
+- **MANDATORY: Run integration tests to verify functionality actually works:**
+  ```bash
+  # Run integration tests with real Power BI connection
+  python run_integration_tests.py --yes
+  ```
 - **Run formatting checks as part of testing workflow:**
   ```bash
   # Full local validation (same as CI)
@@ -62,6 +67,17 @@ This repository supports three distinct environments that must be kept consisten
   flake8 src/ tests/ --config=.flake8
   pytest tests/ -k "not test_integration" -v
   ```
+
+## Integration Testing Requirements
+- **CRITICAL: You MUST run integration tests before submitting any changes**
+- Unit tests are not sufficient - they only test mocked functionality
+- Integration tests verify that your changes work with real Power BI datasets
+- If you implement features that depend on ADOMD.NET or Power BI APIs:
+  1. First run unit tests to verify basic logic
+  2. **Then ALWAYS run integration tests** to ensure real-world functionality
+  3. If integration tests fail, fix the issues before submitting
+  4. Integration test failures indicate your implementation has real bugs
+- **Never submit changes without running integration tests first**
 
 ## Why This Matters
 - GitHub Actions will fail if code is not properly formatted
