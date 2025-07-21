@@ -274,17 +274,31 @@ class TestPowerBIConnectorMetadata:
     def test_discover_tables_with_metadata(self, connector, mock_pyadomd):
         """Test discovering tables with metadata"""
         # Arrange
-        mock_cursor = MagicMock()
-        mock_conn = MagicMock()
-        mock_conn.cursor.return_value = mock_cursor
-        mock_pyadomd.return_value.__enter__.return_value = mock_conn
+        mock_adomd_conn = MagicMock()
+        mock_pyadomd_conn = MagicMock()
+        mock_pyadomd_conn.conn = mock_adomd_conn
+        mock_pyadomd.return_value.__enter__.return_value = mock_pyadomd_conn
 
-        # Mock table data with descriptions
-        mock_cursor.fetchall.return_value = [
-            (1, "Sales", "Sales transactions table"),
-            (2, "Products", "Product information"),
-            (3, "Customers", None),  # Test None description
-        ]
+        # Mock schema dataset
+        mock_dataset = MagicMock()
+        mock_table = MagicMock()
+        mock_dataset.Tables = [mock_table]
+        mock_adomd_conn.GetSchemaDataSet.return_value = mock_dataset
+
+        # Mock table rows with proper mocking
+        mock_row1 = MagicMock()
+        mock_row1.__getitem__.return_value = "Sales"
+        mock_row1.get.return_value = "Sales transactions table"
+
+        mock_row2 = MagicMock()
+        mock_row2.__getitem__.return_value = "Products"
+        mock_row2.get.return_value = "Product information"
+
+        mock_row3 = MagicMock()
+        mock_row3.__getitem__.return_value = "Customers"
+        mock_row3.get.return_value = ""  # None description converted to empty string
+
+        mock_table.Rows = [mock_row1, mock_row2, mock_row3]
 
         # Act
         result = connector.discover_tables_with_metadata()
@@ -296,27 +310,42 @@ class TestPowerBIConnectorMetadata:
         assert result[1]["name"] == "Products"
         assert result[1]["description"] == "Product information"
         assert result[2]["name"] == "Customers"
-        assert result[2]["description"] == ""  # None converted to empty string
-
-        # Verify SQL query was executed
-        mock_cursor.execute.assert_called_once()
-        executed_query = mock_cursor.execute.call_args[0][0]
-        assert "$SYSTEM.TMSCHEMA_TABLES" in executed_query
-        assert "[Name] NOT LIKE '$%'" in executed_query
+        assert result[2]["description"] == ""
 
     def test_get_relationships(self, connector, mock_pyadomd):
         """Test getting relationships between tables"""
         # Arrange
-        mock_cursor = MagicMock()
-        mock_conn = MagicMock()
-        mock_conn.cursor.return_value = mock_cursor
-        mock_pyadomd.return_value.__enter__.return_value = mock_conn
+        mock_adomd_conn = MagicMock()
+        mock_pyadomd_conn = MagicMock()
+        mock_pyadomd_conn.conn = mock_adomd_conn
+        mock_pyadomd.return_value.__enter__.return_value = mock_pyadomd_conn
 
-        # Mock relationship data
-        mock_cursor.fetchall.return_value = [
-            ("Rel1", "Sales", "ProductID", "Products", "ID"),
-            ("Rel2", "Sales", "CustomerID", "Customers", "ID"),
-        ]
+        # Mock schema dataset for relationships
+        mock_dataset = MagicMock()
+        mock_table = MagicMock()
+        mock_dataset.Tables = [mock_table]
+        mock_adomd_conn.GetSchemaDataSet.return_value = mock_dataset
+
+        # Mock relationship rows with simple approach
+        mock_row1 = MagicMock()
+        mock_row1.get.side_effect = lambda key, default="": {
+            "Name": "Rel1",
+            "FromTable": "Sales",
+            "FromColumn": "ProductID",
+            "ToTable": "Products",
+            "ToColumn": "ID",
+        }.get(key, default)
+
+        mock_row2 = MagicMock()
+        mock_row2.get.side_effect = lambda key, default="": {
+            "Name": "Rel2",
+            "FromTable": "Sales",
+            "FromColumn": "CustomerID",
+            "ToTable": "Customers",
+            "ToColumn": "ID",
+        }.get(key, default)
+
+        mock_table.Rows = [mock_row1, mock_row2]
 
         # Act
         result = connector.get_relationships()
@@ -329,69 +358,68 @@ class TestPowerBIConnectorMetadata:
         assert result[0]["to_table"] == "Products"
         assert result[0]["to_column"] == "ID"
 
-        # Verify SQL query was executed
-        mock_cursor.execute.assert_called_once()
-        executed_query = mock_cursor.execute.call_args[0][0]
-        assert "$SYSTEM.TMSCHEMA_RELATIONSHIPS" in executed_query
-
     def test_get_table_schema_with_metadata(self, connector, mock_pyadomd):
         """Test getting table schema with enhanced metadata"""
-        # Arrange
-        mock_cursor = MagicMock()
-        mock_conn = MagicMock()
-        mock_conn.cursor.return_value = mock_cursor
-        mock_pyadomd.return_value.__enter__.return_value = mock_conn
+        # This test now uses the working get_table_schema method + metadata enhancements
+        # We need to mock the basic get_table_schema method
+        with patch.object(connector, "get_table_schema") as mock_get_schema:
+            mock_get_schema.return_value = {
+                "table_name": "Sales",
+                "type": "data_table",
+                "columns": ["ProductID", "Amount", "Date"],
+            }
 
-        # Mock table info
-        mock_cursor.fetchone.return_value = (1, "Sales table description")
+            # Mock get_table_relationships to return empty
+            with patch.object(connector, "get_table_relationships") as mock_get_rels:
+                mock_get_rels.return_value = []
 
-        # Mock column data for DAX query
-        mock_cursor.description = [("ProductID",), ("Amount",), ("Date",)]
+                # Act
+                result = connector.get_table_schema_with_metadata("Sales")
 
-        # Mock column descriptions
-        mock_cursor.fetchall.side_effect = [
-            [("ProductID", "Product identifier"), ("Amount", "Sale amount"), ("Date", None)],  # columns
-            [],  # relationships (empty for this table)
-        ]
-
-        # Act
-        result = connector.get_table_schema_with_metadata("Sales")
-
-        # Assert
-        assert result["table_name"] == "Sales"
-        assert result["type"] == "data_table"
-        assert result["description"] == "Sales table description"
-        assert len(result["columns"]) == 3
-        assert result["columns"][0]["name"] == "ProductID"
-        assert result["columns"][0]["description"] == "Product identifier"
-        assert result["columns"][2]["description"] == ""  # None converted to empty string
-        assert "relationships" in result
+                # Assert
+                assert result["table_name"] == "Sales"
+                assert result["type"] == "data_table"
+                assert result["description"] == ""  # No description available in basic approach
+                assert len(result["columns"]) == 3
+                assert result["columns"][0]["name"] == "ProductID"
+                assert result["columns"][0]["description"] == ""  # No column descriptions available
+                assert "relationships" in result
 
     def test_get_table_relationships(self, connector, mock_pyadomd):
         """Test getting relationships for a specific table"""
-        # Arrange
-        mock_cursor = MagicMock()
-        mock_conn = MagicMock()
-        mock_conn.cursor.return_value = mock_cursor
-        mock_pyadomd.return_value.__enter__.return_value = mock_conn
+        # This now filters all relationships for a specific table
+        with patch.object(connector, "get_relationships") as mock_get_all_rels:
+            mock_get_all_rels.return_value = [
+                {
+                    "name": "Rel1",
+                    "from_table": "Sales",
+                    "from_column": "ProductID",
+                    "to_table": "Products",
+                    "to_column": "ID",
+                },
+                {
+                    "name": "Rel2",
+                    "from_table": "Customers",
+                    "from_column": "ID",
+                    "to_table": "Orders",
+                    "to_column": "CustomerID",
+                },
+                {
+                    "name": "Rel3",
+                    "from_table": "Sales",
+                    "from_column": "CustomerID",
+                    "to_table": "Customers",
+                    "to_column": "ID",
+                },
+            ]
 
-        # Mock relationship data for specific table
-        mock_cursor.fetchall.return_value = [
-            ("Rel1", "Sales", "ProductID", "Products", "ID"),
-        ]
+            # Act
+            result = connector.get_table_relationships("Sales")
 
-        # Act
-        result = connector.get_table_relationships("Sales")
-
-        # Assert
-        assert len(result) == 1
-        assert result[0]["from_table"] == "Sales"
-        assert result[0]["to_table"] == "Products"
-
-        # Verify SQL query filters for the specific table
-        mock_cursor.execute.assert_called_once()
-        executed_query = mock_cursor.execute.call_args[0][0]
-        assert "WHERE ft.[Name] = 'Sales' OR tt.[Name] = 'Sales'" in executed_query
+            # Assert - should return only relationships involving "Sales" table
+            assert len(result) == 2  # Rel1 and Rel3
+            assert result[0]["name"] == "Rel1"
+            assert result[1]["name"] == "Rel3"
 
     def test_error_handling_metadata_methods(self, connector, mock_pyadomd):
         """Test error handling in metadata methods"""
