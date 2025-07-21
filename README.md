@@ -97,6 +97,10 @@ Add to your Claude Desktop configuration file:
 
 ### Docker
 
+**⚠️ Important**: Docker containers do **NOT** use `.env` files. The `.env` file is excluded 
+from the Docker build context for security. You must provide environment variables via 
+`docker run -e`, Docker Compose, or your cloud platform.
+
 Build the container image:
 ```bash
 docker build -t powerbi-mcp .
@@ -119,9 +123,16 @@ the initial `endpoint` event (typically `/messages/`).
 
 The container includes the .NET runtime required by `pythonnet` and `pyadomd`.
 It sets `PYTHONNET_RUNTIME=coreclr` and `DOTNET_ROOT=/usr/share/dotnet` so the
-.NET runtime is detected automatically. Environment variables mirror those in
-`.env.example`; pass them with `-e VAR=value` or provide a `.env` file in the
-build context.
+.NET runtime is detected automatically.
+
+**Important**: The Docker container does **NOT** use `.env` files. Any `.env` file in your
+local directory will be excluded from the Docker image via `.dockerignore` for security reasons.
+Instead, provide environment variables using:
+- `docker run -e VARIABLE=value`
+- Docker Compose environment variables
+- Cloud platform environment variable injection
+
+The available environment variables mirror those in `.env.example`.
 
 ## 📖 Usage
 
