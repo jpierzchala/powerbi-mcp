@@ -20,7 +20,8 @@ WORKDIR /app
 COPY requirements.txt requirements.txt
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Copy application code
+# Copy application code (excluding files listed in .dockerignore, including .env files)
+# Note: .env files are excluded via .dockerignore - use environment variables instead
 COPY . .
 
 # Entrypoint script

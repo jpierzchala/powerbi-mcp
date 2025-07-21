@@ -1,0 +1,60 @@
+# Environment files - should not be copied into Docker images
+# Use environment variables via docker run -e, docker-compose, or cloud deployment instead
+.env
+.env.*
+.env.local
+.env.*.local
+
+# Git and development files
+.git
+.gitignore
+.github
+
+# IDE and editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Python development files
+.pytest_cache/
+__pycache__/
+*.pyc
+.mypy_cache/
+
+# Documentation and development files
+docs/
+AGENTS.md
+contributing.md
+*.md
+!README.md
+
+# Build and temporary files
+*.tmp
+*.backup
+*.bak
+tmp/
+temp/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Test files (not needed in production image)
+tests/
+pytest.ini
+.coverage
+htmlcov/
+.tox/
+
+# CI/CD files (not needed in runtime)
+copilot-setup-steps.yml
+Makefile
+
+# Development scripts (not needed in runtime)
+quickstart.py
+run_integration_tests.py
+
+# Development demonstration files
+PowerBI\ Mcp\ Demonstration.gif
