@@ -1,0 +1,58 @@
+# Environment files - exclude from Docker builds for security
+.env
+.env.local
+.env.*.local
+*.env
+
+# Version control
+.git
+.gitignore
+
+# Documentation and project files that aren't needed in container
+README.md
+CONTRIBUTING.md
+CHANGELOG.md
+AGENTS.md
+*.md
+docs/
+
+# Development and testing files
+tests/
+.pytest_cache/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.coverage
+htmlcov/
+
+# IDE and editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS files
+.DS_Store
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+
+# Build artifacts and temporary files
+build/
+dist/
+*.egg-info/
+tmp/
+temp/
+*.tmp
+*.backup
+*.bak
+
+# CI/CD files
+.github/
+copilot-setup-steps.yml
+
+# Demo and example files
+*.gif
+PowerBI\ Mcp\ Demonstration.gif
