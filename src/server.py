@@ -327,14 +327,24 @@ class PowerBIConnector:
                         schema_table = relationships_list_obj[0]
                         for row in schema_table.Rows:
                             # Build relationship info from available columns
-                            rel_info = {
-                                "name": row.get("Name", "") or "",
-                                "from_table": row.get("FromTable", "") or "",
-                                "from_column": row.get("FromColumn", "") or "",
-                                "to_table": row.get("ToTable", "") or "",
-                                "to_column": row.get("ToColumn", "") or "",
-                            }
-                            relationships.append(rel_info)
+                            # Use simple bracket notation for DataRow access
+                            try:
+                                rel_info = {
+                                    "name": str(row["Name"]) if row.Table.Columns.Contains("Name") else "",
+                                    "from_table": (
+                                        str(row["FromTable"]) if row.Table.Columns.Contains("FromTable") else ""
+                                    ),
+                                    "from_column": (
+                                        str(row["FromColumn"]) if row.Table.Columns.Contains("FromColumn") else ""
+                                    ),
+                                    "to_table": str(row["ToTable"]) if row.Table.Columns.Contains("ToTable") else "",
+                                    "to_column": str(row["ToColumn"]) if row.Table.Columns.Contains("ToColumn") else "",
+                                }
+                                relationships.append(rel_info)
+                            except Exception as row_error:
+                                # Skip this row if we can't access the columns
+                                logger.debug(f"Skipping relationship row due to access error: {row_error}")
+                                continue
                 except Exception as schema_error:
                     logger.warning(f"Could not get relationships from TabularRelationships schema: {schema_error}")
                     # Relationships might not be available in all environments

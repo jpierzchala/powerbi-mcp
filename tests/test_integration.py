@@ -421,9 +421,12 @@ class TestMCPServerIntegration:
         result = await mcp_server._handle_list_tables()
 
         assert isinstance(result, str), "Tables list result should be a string"
+
+        # The new enhanced metadata functionality returns JSON format
+        # Check for JSON structure indicators or fallback messages
         assert (
-            "Available tables:" in result or "No tables found" in result
-        ), f"Result should contain tables information: {result}"
+            '"tables"' in result or '"relationships"' in result or "No tables found" in result
+        ), f"Result should contain tables metadata or error message: {result}"
 
     @pytest.mark.asyncio
     async def test_get_table_info_tool(self, mcp_server, test_config):
