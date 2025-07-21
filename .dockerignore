@@ -1,0 +1,55 @@
+# Environment files - prevent inclusion in Docker images
+.env
+.env.local
+.env.*.local
+*.env
+
+# Git and version control
+.git
+.gitignore
+
+# IDE and development files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Python cache and development files
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+.coverage
+htmlcov/
+.mypy_cache
+
+# Documentation and project files
+README.md
+CHANGELOG.md
+contributing.md
+LICENSE
+AGENTS.md
+docs/
+*.md
+
+# Test and development files
+tests/
+*.log
+*.backup
+*.bak
+
+# Temporary and backup files
+tmp/
+temp/
+*.tmp
+
+# OS files
+.DS_Store
+Thumbs.db
+Desktop.ini
+
+# Build artifacts
+dist/
+build/
+*.egg-info/

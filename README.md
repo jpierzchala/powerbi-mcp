@@ -119,9 +119,11 @@ the initial `endpoint` event (typically `/messages/`).
 
 The container includes the .NET runtime required by `pythonnet` and `pyadomd`.
 It sets `PYTHONNET_RUNTIME=coreclr` and `DOTNET_ROOT=/usr/share/dotnet` so the
-.NET runtime is detected automatically. Environment variables mirror those in
-`.env.example`; pass them with `-e VAR=value` or provide a `.env` file in the
-build context.
+.NET runtime is detected automatically. 
+
+**Note**: `.env` files are excluded from Docker builds for security. Environment 
+variables must be passed explicitly using `-e VAR=value` when running the container.
+Configuration variables mirror those in `.env.example`.
 
 ## 📖 Usage
 
