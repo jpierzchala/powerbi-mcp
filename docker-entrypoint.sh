@@ -1,12 +1,7 @@
 #!/bin/sh
 set -e
 
-# Load environment variables from /app/.env if present
-if [ -f "/app/.env" ]; then
-  echo "Loading environment variables from /app/.env"
-  set -a
-  . /app/.env
-  set +a
-fi
+# Docker containers should receive environment variables via docker run -e 
+# or Docker secrets, not from .env files. .env files are for local development only.
 
 exec "$@"

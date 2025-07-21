@@ -102,16 +102,30 @@ Build the container image:
 docker build -t powerbi-mcp .
 ```
 
-Run the server:
+Run the server with environment variables:
 ```bash
-docker run -it --rm -e OPENAI_API_KEY=<key> powerbi-mcp
+docker run -it --rm \
+  -e OPENAI_API_KEY=<your-openai-key> \
+  -e DEFAULT_TENANT_ID=<your-tenant-id> \
+  -e DEFAULT_CLIENT_ID=<your-client-id> \
+  -e DEFAULT_CLIENT_SECRET=<your-client-secret> \
+  powerbi-mcp
 ```
+
 The container listens on port `8000` by default. Override the host or port using
 environment variables or command-line arguments:
 ```bash
-docker run -it --rm -e OPENAI_API_KEY=<key> -p 7000:7000 powerbi-mcp \
+docker run -it --rm \
+  -e OPENAI_API_KEY=<your-openai-key> \
+  -p 7000:7000 \
+  powerbi-mcp \
   python src/server.py --host 0.0.0.0 --port 7000
 ```
+
+**Security Note:** Docker containers do **NOT** load `.env` files. The `.env` file is only for local development. For Docker deployments:
+- Use `docker run -e VARIABLE=value` to pass environment variables
+- Use Docker secrets for production deployments
+- Use Docker Compose with environment variable files if needed
 
 The server exposes a Server-Sent Events endpoint at `/sse`. Clients should
 connect to this endpoint and then POST JSON-RPC messages to the path provided in
@@ -119,9 +133,7 @@ the initial `endpoint` event (typically `/messages/`).
 
 The container includes the .NET runtime required by `pythonnet` and `pyadomd`.
 It sets `PYTHONNET_RUNTIME=coreclr` and `DOTNET_ROOT=/usr/share/dotnet` so the
-.NET runtime is detected automatically. Environment variables mirror those in
-`.env.example`; pass them with `-e VAR=value` or provide a `.env` file in the
-build context.
+.NET runtime is detected automatically.
 
 ## 📖 Usage
 
@@ -170,7 +182,9 @@ Execute DAX: EVALUATE SUMMARIZE(Sales, Product[Category], "Total", SUM(Sales[Amo
 
 ### Environment Variables
 
-Create a `.env` file (OpenAI settings are optional):
+**For Local Development:**
+
+Create a `.env` file in the project root (OpenAI settings are optional):
 
 ```env
 # OpenAI Configuration (optional)
@@ -187,6 +201,31 @@ DEFAULT_CLIENT_SECRET=your_client_secret
 # Logging
 LOG_LEVEL=INFO
 ```
+
+**For Docker Deployments:**
+
+**Do not use `.env` files with Docker containers.** Instead, pass environment variables using:
+
+```bash
+# Using docker run
+docker run -it --rm \
+  -e OPENAI_API_KEY=your_openai_api_key_here \
+  -e DEFAULT_TENANT_ID=your_tenant_id \
+  -e DEFAULT_CLIENT_ID=your_client_id \
+  -e DEFAULT_CLIENT_SECRET=your_client_secret \
+  -e LOG_LEVEL=INFO \
+  powerbi-mcp
+
+# Or using Docker Compose with environment files
+# docker-compose.yml
+services:
+  powerbi-mcp:
+    image: powerbi-mcp
+    env_file:
+      - production.env  # NOT .env
+```
+
+This follows Docker security best practices by keeping secrets out of container images.
 
 ## 🏗️ Architecture
 
