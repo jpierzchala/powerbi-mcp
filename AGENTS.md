@@ -52,15 +52,60 @@ This repository supports three distinct environments that must be kept consisten
   ```
 
 ## Testing Requirements
-- Always run `pytest -q` after changes.
-- For every new or modified feature, add or update tests to cover the change.
+
+### **CRITICAL: Full Test Suite Validation**
+**🚨 MANDATORY: Before completing any task, ALL tests must pass. No exceptions.**
+
+1. **Final Validation is REQUIRED:**
+   ```bash
+   # Complete test suite - ALL must pass
+   pytest -v
+   ```
+
+2. **Never skip failing tests** - If tests fail, they must be fixed, not removed
+   - Failing tests indicate broken functionality
+   - Only remove tests with explicit approval from user/operator
+   - Document reason for any test removal in commit message
+
+3. **Test Execution Order** (layered approach):
+   ```bash
+   # 1. Unit tests (fast, isolated, mocked)
+   pytest tests/unit/ -v
+   
+   # 2. Local tests (require server startup)
+   pytest tests/local/ -v
+   
+   # 3. Integration tests (require external services)
+   pytest tests/integration/ -v
+   ```
+
+### **Test Development Guidelines**
+- Always run `pytest -q` after changes
+- For every new or modified feature, add or update tests to cover the change
+- **Maintain test isolation** - tests must not depend on each other
+- **Use appropriate test markers:**
+  - `@pytest.mark.unit` for unit tests
+  - `@pytest.mark.local` for local server tests  
+  - `@pytest.mark.integration` for integration tests
+
+### **When Tests Fail**
+1. **DO NOT COMMIT** until all tests pass
+2. **DO NOT DELETE** failing tests without approval
+3. **Investigate and fix** the root cause
+4. If unsure about test removal, ask: "Should I remove test X because of reason Y?"
+
+### **Code Quality Integration**
 - **Run formatting checks as part of testing workflow:**
   ```bash
   # Full local validation (same as CI)
   black --check --diff src/ tests/ --line-length=120
   isort --check-only --diff src/ tests/ --profile=black
   flake8 src/ tests/ --config=.flake8
-  pytest tests/ -k "not test_integration" -v
+  
+  # Run all test layers
+  pytest tests/unit/ -v --tb=short
+  pytest tests/local/ -v --tb=short  
+  pytest tests/integration/ -v --tb=short
   ```
 
 ## Why This Matters
@@ -69,8 +114,11 @@ This repository supports three distinct environments that must be kept consisten
 - Automated checks prevent style issues from reaching production
 - Following these steps ensures CI/CD pipeline success
 
-## Quick Validation Command
+## Quick Validation Commands
 ```bash
-# One-liner to check everything locally
-black src/ tests/ --line-length=120 && isort src/ tests/ --profile=black && flake8 src/ tests/ --config=.flake8 && echo "✅ Code quality checks passed!"
+# Code quality and unit tests (fast)
+black src/ tests/ --line-length=120 && isort src/ tests/ --profile=black && flake8 src/ tests/ --config=.flake8 && pytest tests/unit/ -v && echo "✅ Code quality and unit tests passed!"
+
+# Full validation including all test layers (comprehensive)
+black src/ tests/ --line-length=120 && isort src/ tests/ --profile=black && flake8 src/ tests/ --config=.flake8 && pytest -v && echo "🎉 ALL TESTS PASSED - Ready to commit!"
 ```
