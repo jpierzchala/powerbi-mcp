@@ -86,6 +86,9 @@ jobs:
     # Run integration tests on both pull requests and push to master
     needs: [unit-tests, local-tests]
     
+    # Use copilot environment to access integration test variables and secrets
+    environment: copilot
+    
     steps:
     - uses: actions/checkout@v4
     
