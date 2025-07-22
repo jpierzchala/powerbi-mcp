@@ -131,7 +131,7 @@ jobs:
         TEST_EXPECTED_TABLE: ${{ secrets.TEST_EXPECTED_TABLE }}
         TEST_EXPECTED_COLUMN: ${{ secrets.TEST_EXPECTED_COLUMN }}
         TEST_DAX_QUERY: ${{ secrets.TEST_DAX_QUERY }}
-        TEST_MIN_TABLES_COUNT: ${{ secrets.TEST_MIN_TABLES_COUNT }}
+        TEST_MIN_TABLES_COUNT: ${{ vars.TEST_MIN_TABLES_COUNT }}
         OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
       run: |
         echo "🚀 Running integration tests..."
