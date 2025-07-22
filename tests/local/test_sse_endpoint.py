@@ -27,7 +27,8 @@ async def test_sse_list_tools():
         [
             sys.executable,
             os.path.join(os.path.dirname(__file__), "..", "..", "src", "server.py"),
-            "--port", "8133"  # Explicitly pass port argument
+            "--port",
+            "8133",  # Explicitly pass port argument
         ],
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
@@ -41,16 +42,17 @@ async def test_sse_list_tools():
             if proc.poll() is not None:
                 stdout, stderr = proc.communicate()
                 print(f"Server process died: stdout={stdout.decode()}, stderr={stderr.decode()}")
-                assert False, f"Server process died unexpectedly"
-            
+                assert False, "Server process died unexpectedly"
+
             time.sleep(1.0)
             # Try a simple health check - SSE endpoint should accept connections
             try:
                 # Don't wait for response, just try to connect
                 import socket
+
                 sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
                 sock.settimeout(0.5)
-                result = sock.connect_ex(('127.0.0.1', 8133))
+                result = sock.connect_ex(("127.0.0.1", 8133))
                 sock.close()
                 if result == 0:
                     print(f"Server is listening on attempt {i + 1} ({time.time() - start_time:.2f}s)")

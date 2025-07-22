@@ -15,7 +15,8 @@ def test_server_stays_running():
         [
             sys.executable,
             os.path.join(os.path.dirname(__file__), "..", "..", "src", "server.py"),
-            "--port", "8123"  # Explicitly pass port argument
+            "--port",
+            "8123",  # Explicitly pass port argument
         ],
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
@@ -28,7 +29,7 @@ def test_server_stays_running():
                 stdout, stderr = proc.communicate()
                 assert False, f"Server process died unexpectedly after {i}s: {stderr.decode()}"
             time.sleep(1.0)
-            
+
         # Final check - server should still be running after 5 seconds
         assert proc.poll() is None, "Server process should still be running"
     finally:

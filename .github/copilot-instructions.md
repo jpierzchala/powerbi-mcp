@@ -39,17 +39,22 @@ This repository supports three distinct environments that must be kept consisten
 - Recreate the environment described in the `Dockerfile` (install the .NET runtime and ADOMD.NET library) so tests mimic the container as closely as possible.
 
 ## Code Quality Requirements
-- **ALWAYS run code formatting before committing changes:**
+- **ALWAYS run code formatting checks before committing changes (GitHub Actions will fail otherwise):**
   ```bash
-  # Auto-format code with black
-  black src/ tests/ --line-length=120
-  
-  # Organize imports with isort
-  isort src/ tests/ --profile=black
-  
-  # Check for linting issues
+  # Check code formatting (GitHub Actions equivalent)
+  black --check --diff src/ tests/ --line-length=120
+  isort --check-only --diff src/ tests/ --profile=black
   flake8 src/ tests/ --config=.flake8
+  
+  # Auto-format code if checks fail
+  black src/ tests/ --line-length=120
+  isort src/ tests/ --profile=black
   ```
+
+### **⚠️ CRITICAL: Code Formatting is MANDATORY**
+- **GitHub Actions will FAIL if code is not properly formatted with black**
+- **Always run `black --check` before committing**
+- **All formatting issues must be fixed before push**
 
 ## Testing Requirements
 
@@ -95,10 +100,10 @@ This repository supports three distinct environments that must be kept consisten
 4. If unsure about test removal, ask: "Should I remove test X because of reason Y?"
 
 ### **Code Quality Integration**
-- **Run formatting checks as part of testing workflow:**
+- **Run formatting checks as part of testing workflow (MANDATORY before commit):**
   ```bash
-  # Full local validation (same as CI)
-  black --check --diff src/ tests/ --line-length=120
+  # Full local validation (same as CI/CD pipeline)
+  black --check --diff src/ tests/ --line-length=120  # ⚠️ MUST PASS - GitHub Actions requirement
   isort --check-only --diff src/ tests/ --profile=black
   flake8 src/ tests/ --config=.flake8
   
@@ -109,16 +114,19 @@ This repository supports three distinct environments that must be kept consisten
   ```
 
 ## Why This Matters
-- GitHub Actions will fail if code is not properly formatted
+- **🚨 CRITICAL: GitHub Actions will fail if code is not properly formatted with black**
+- **Formatting checks are part of CI/CD pipeline and will block merges**
 - Consistent formatting improves code readability and maintainability
-- Automated checks prevent style issues from reaching production
 - Following these steps ensures CI/CD pipeline success
 
 ## Quick Validation Commands
 ```bash
-# Code quality and unit tests (fast)
-black src/ tests/ --line-length=120 && isort src/ tests/ --profile=black && flake8 src/ tests/ --config=.flake8 && pytest tests/unit/ -v && echo "✅ Code quality and unit tests passed!"
+# Code quality and unit tests (fast) - includes mandatory formatting checks
+black --check --diff src/ tests/ --line-length=120 && isort --check-only src/ tests/ --profile=black && flake8 src/ tests/ --config=.flake8 && pytest tests/unit/ -v && echo "✅ Code quality and unit tests passed!"
 
 # Full validation including all test layers (comprehensive)
-black src/ tests/ --line-length=120 && isort src/ tests/ --profile=black && flake8 src/ tests/ --config=.flake8 && pytest -v && echo "🎉 ALL TESTS PASSED - Ready to commit!"
+black --check --diff src/ tests/ --line-length=120 && isort --check-only src/ tests/ --profile=black && flake8 src/ tests/ --config=.flake8 && pytest -v && echo "🎉 ALL TESTS PASSED - Ready to commit!"
+
+# Auto-fix formatting if checks fail, then validate again
+black src/ tests/ --line-length=120 && isort src/ tests/ --profile=black && echo "🔧 Formatting fixed - now run validation again"
 ```
