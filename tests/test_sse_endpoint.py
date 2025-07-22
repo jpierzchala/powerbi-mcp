@@ -15,7 +15,7 @@ async def test_sse_list_tools():
     start_time = time.time()
 
     env = os.environ.copy()
-    env.setdefault("MCP_PERSIST", "0")
+    env.setdefault("MCP_PERSIST", "1")  # Keep server running during test
     env.setdefault("PORT", "8133")
     # Speed up server startup for testing
     env.setdefault("PYTHONNET_RUNTIME", "coreclr")
@@ -26,6 +26,7 @@ async def test_sse_list_tools():
         [
             sys.executable,
             os.path.join("src", "server.py"),
+            "--port", "8133"  # Explicitly pass port argument
         ],
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
@@ -34,17 +35,44 @@ async def test_sse_list_tools():
 
     try:
         print(f"Waiting for server to start... ({time.time() - start_time:.2f}s)")
-        for i in range(40):  # Increase attempts to cover 20s startup time
+        # Wait for server startup by checking if process is running and give it time
+        for i in range(15):  # 15 seconds should be enough
+            if proc.poll() is not None:
+                stdout, stderr = proc.communicate()
+                print(f"Server process died: stdout={stdout.decode()}, stderr={stderr.decode()}")
+                assert False, f"Server process died unexpectedly"
+            
+            time.sleep(1.0)
+            # Try a simple health check - SSE endpoint should accept connections
             try:
-                httpx.get("http://127.0.0.1:8133/sse", timeout=0.5)  # Shorter timeout
-                print(f"Server responded on attempt {i + 1} ({time.time() - start_time:.2f}s)")
-                break
+                # Don't wait for response, just try to connect
+                import socket
+                sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                sock.settimeout(0.5)
+                result = sock.connect_ex(('127.0.0.1', 8133))
+                sock.close()
+                if result == 0:
+                    print(f"Server is listening on attempt {i + 1} ({time.time() - start_time:.2f}s)")
+                    break
             except Exception as e:
-                if i < 5:  # Only print first few attempts to reduce noise
-                    print(f"Attempt {i + 1} failed: {e} ({time.time() - start_time:.2f}s)")
-                time.sleep(0.5)  # 500ms between attempts
+                print(f"Socket test {i + 1} failed: {e} ({time.time() - start_time:.2f}s)")
         else:
-            print("Server failed to start within timeout")
+            print("Server failed to start listening within timeout")
+            # Print server output for debugging
+            if proc.poll() is None:
+                proc.terminate()
+                try:
+                    stdout, stderr = proc.communicate(timeout=5)
+                    print(f"Server stdout: {stdout.decode()}")
+                    print(f"Server stderr: {stderr.decode()}")
+                except subprocess.TimeoutExpired:
+                    proc.kill()
+                    print("Server did not terminate, killed")
+            else:
+                stdout, stderr = proc.communicate()
+                print(f"Server stdout: {stdout.decode()}")
+                print(f"Server stderr: {stderr.decode()}")
+            assert False, "Server failed to start within 15 seconds"
 
         print(f"Connecting to SSE... ({time.time() - start_time:.2f}s)")
         async with sse_client("http://127.0.0.1:8133/sse") as streams:
