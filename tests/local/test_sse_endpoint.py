@@ -9,6 +9,7 @@ from mcp.client.session import ClientSession
 from mcp.client.sse import sse_client
 
 
+@pytest.mark.local
 @pytest.mark.asyncio
 async def test_sse_list_tools():
     print("Starting SSE test...")
@@ -25,7 +26,7 @@ async def test_sse_list_tools():
     proc = subprocess.Popen(
         [
             sys.executable,
-            os.path.join("src", "server.py"),
+            os.path.join(os.path.dirname(__file__), "..", "..", "src", "server.py"),
             "--port", "8133"  # Explicitly pass port argument
         ],
         stdout=subprocess.PIPE,

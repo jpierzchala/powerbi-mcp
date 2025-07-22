@@ -4,6 +4,10 @@ import sys
 import time
 
 import httpx
+import pytest
+
+
+@pytest.mark.local
 
 
 def test_server_stays_running():
@@ -13,7 +17,7 @@ def test_server_stays_running():
     proc = subprocess.Popen(
         [
             sys.executable,
-            os.path.join("src", "server.py"),
+            os.path.join(os.path.dirname(__file__), "..", "..", "src", "server.py"),
         ],
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,

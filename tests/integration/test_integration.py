@@ -29,7 +29,7 @@ load_dotenv()
 integration_enabled = os.getenv("ENABLE_INTEGRATION_TESTS", "false").lower() == "true"
 
 # Add src to path
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "..", "src"))
 
 # Import for type checking only
 if TYPE_CHECKING:
@@ -40,6 +40,7 @@ if integration_enabled:
     from server import DataAnalyzer, PowerBIConnector, PowerBIMCPServer  # noqa: F401
 
 
+@pytest.mark.integration
 @pytest.mark.skipif(
     not integration_enabled, reason="Integration tests disabled. Set ENABLE_INTEGRATION_TESTS=true to enable."
 )
@@ -253,6 +254,7 @@ class TestPowerBIIntegration:
             assert isinstance(sample_data[0], dict), "Each sample row should be a dictionary"
 
 
+@pytest.mark.integration
 @pytest.mark.skipif(
     not integration_enabled or not os.getenv("OPENAI_API_KEY"),
     reason="Integration tests or OpenAI API key not available",
@@ -349,6 +351,7 @@ class TestDataAnalyzerIntegration:
             assert question.endswith("?"), "Questions should end with question mark"
 
 
+@pytest.mark.integration
 @pytest.mark.skipif(
     not integration_enabled, reason="Integration tests disabled. Set ENABLE_INTEGRATION_TESTS=true to enable."
 )
