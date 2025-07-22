@@ -100,7 +100,7 @@ jobs:
     
     - name: Check integration test configuration
       env:
-        ENABLE_INTEGRATION_TESTS: ${{ secrets.ENABLE_INTEGRATION_TESTS }}
+        ENABLE_INTEGRATION_TESTS: ${{ vars.ENABLE_INTEGRATION_TESTS }}
         TEST_XMLA_ENDPOINT: ${{ secrets.TEST_XMLA_ENDPOINT }}
         TEST_TENANT_ID: ${{ secrets.TEST_TENANT_ID }}
         TEST_CLIENT_ID: ${{ secrets.TEST_CLIENT_ID }}
@@ -119,7 +119,7 @@ jobs:
     - name: Run integration tests
       if: env.ENABLE_INTEGRATION_TESTS == 'true'
       env:
-        ENABLE_INTEGRATION_TESTS: ${{ secrets.ENABLE_INTEGRATION_TESTS }}
+        ENABLE_INTEGRATION_TESTS: ${{ vars.ENABLE_INTEGRATION_TESTS }}
         TEST_XMLA_ENDPOINT: ${{ secrets.TEST_XMLA_ENDPOINT }}
         TEST_TENANT_ID: ${{ secrets.TEST_TENANT_ID }}
         TEST_CLIENT_ID: ${{ secrets.TEST_CLIENT_ID }}
