@@ -1,352 +1,44 @@
 name: "Copilot Setup Steps"
 
-# Automatically run the setup steps when they are changed to allow for easy validation, and
-# allow manual testing through the repository's "Actions" tab
+# This workflow sets up the development environment for GitHub Copilot Coding Agent.
+# It uses a shared composite action to ensure environment consistency with CI/CD pipelines.
 on:
   workflow_dispatch:
+  push:
+    paths:
+      - .github/workflows/copilot-setup-steps.yml
+      - .github/actions/setup-powerbi-environment/**
   pull_request:
     paths:
       - .github/workflows/copilot-setup-steps.yml
+      - .github/actions/setup-powerbi-environment/**
 
 jobs:
   # The job MUST be called `copilot-setup-steps` or it will not be picked up by Copilot.
   copilot-setup-steps:
     runs-on: ubuntu-latest
     
-    # Specify the environment to use for secrets and variables
+    # Use copilot environment for secrets and variables
     environment: copilot
 
-    # Set the permissions to the lowest permissions possible needed for your steps.
-    # Copilot will be given its own token for its operations.
+    # Minimal permissions needed for setup
     permissions:
-      # If you want to clone the repository as part of your setup steps, for example to install dependencies, you'll need the `contents: read` permission. If you don't clone the repository in your setup steps, Copilot will do this for you automatically after the steps complete.
       contents: read
 
-    # You can define any steps you want, and they will run before the agent starts.
-    # If you do not check out your code, Copilot will do this for you.
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Set up Python
-        uses: actions/setup-python@v5
+      - name: Setup PowerBI MCP Environment
+        uses: ./.github/actions/setup-powerbi-environment
         with:
           python-version: "3.11"
-          cache: "pip"
-
-      - name: Install .NET Runtime and ADOMD.NET Dependencies
-        run: |
-          # Make the install script executable and run it in user mode
-          chmod +x scripts/install_dotnet_adomd.sh
-          ./scripts/install_dotnet_adomd.sh --user
-
-      - name: Install Python Dependencies
-        run: |
-          pip install --no-cache-dir -r requirements.txt
-
-      - name: Configure Environment Variables from Secrets
-        env:
-          # All secrets as environment variables to handle multiline values properly
-          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
-          DEFAULT_TENANT_ID: ${{ secrets.DEFAULT_TENANT_ID }}
-          DEFAULT_CLIENT_ID: ${{ secrets.DEFAULT_CLIENT_ID }}
-          DEFAULT_CLIENT_SECRET: ${{ secrets.DEFAULT_CLIENT_SECRET }}
-          TEST_XMLA_ENDPOINT: ${{ secrets.TEST_XMLA_ENDPOINT }}
-          TEST_TENANT_ID: ${{ secrets.TEST_TENANT_ID }}
-          TEST_CLIENT_ID: ${{ secrets.TEST_CLIENT_ID }}
-          TEST_CLIENT_SECRET: ${{ secrets.TEST_CLIENT_SECRET }}
-          TEST_INITIAL_CATALOG: ${{ secrets.TEST_INITIAL_CATALOG }}
-          # Non-sensitive test configuration as variables
-          TEST_EXPECTED_TABLE: ${{ vars.TEST_EXPECTED_TABLE }}
-          TEST_EXPECTED_COLUMN: ${{ vars.TEST_EXPECTED_COLUMN }}
-          TEST_DAX_QUERY: ${{ vars.TEST_DAX_QUERY }}
-          TEST_MIN_TABLES_COUNT: ${{ vars.TEST_MIN_TABLES_COUNT }}
-          # Other variables
-          OPENAI_MODEL: ${{ vars.OPENAI_MODEL }}
-          ENABLE_INTEGRATION_TESTS: ${{ vars.ENABLE_INTEGRATION_TESTS }}
-          LOG_LEVEL: ${{ vars.LOG_LEVEL }}
-        run: |
-          echo "Configuring environment variables from GitHub secrets and variables..."
-          
-          # OpenAI Configuration (secrets)
-          if [ -n "$OPENAI_API_KEY" ]; then
-            echo "OPENAI_API_KEY=$OPENAI_API_KEY" >> $GITHUB_ENV
-            echo "SUCCESS: OpenAI API key configured"
-          else
-            echo "INFO: OpenAI API key not configured - optional"
-          fi
-          
-          # OpenAI Model (variable, with default)
-          if [ -z "$OPENAI_MODEL" ]; then
-            OPENAI_MODEL="gpt-4o-mini"
-          fi
-          echo "OPENAI_MODEL=$OPENAI_MODEL" >> $GITHUB_ENV
-          echo "SUCCESS: OpenAI model configured: $OPENAI_MODEL"
-          
-          # Power BI Credentials (secrets - optional)
-          if [ -n "$DEFAULT_TENANT_ID" ]; then
-            echo "DEFAULT_TENANT_ID=$DEFAULT_TENANT_ID" >> $GITHUB_ENV
-            echo "SUCCESS: Default Tenant ID configured"
-          else
-            echo "INFO: Default Tenant ID not configured - optional"
-          fi
-          
-          if [ -n "$DEFAULT_CLIENT_ID" ]; then
-            echo "DEFAULT_CLIENT_ID=$DEFAULT_CLIENT_ID" >> $GITHUB_ENV
-            echo "SUCCESS: Default Client ID configured"
-          else
-            echo "INFO: Default Client ID not configured - optional"
-          fi
-          
-          if [ -n "$DEFAULT_CLIENT_SECRET" ]; then
-            echo "DEFAULT_CLIENT_SECRET=$DEFAULT_CLIENT_SECRET" >> $GITHUB_ENV
-            echo "SUCCESS: Default Client Secret configured"
-          else
-            echo "INFO: Default Client Secret not configured - optional"
-          fi
-          
-          # Integration Tests Configuration (variable)
-          if [ -z "$ENABLE_INTEGRATION_TESTS" ]; then
-            ENABLE_INTEGRATION_TESTS="false"
-          fi
-          echo "ENABLE_INTEGRATION_TESTS=$ENABLE_INTEGRATION_TESTS" >> $GITHUB_ENV
-          echo "SUCCESS: Integration tests enabled: $ENABLE_INTEGRATION_TESTS"
-          
-          # Test Configuration (secrets - only needed if integration tests enabled)
-          if [ "$ENABLE_INTEGRATION_TESTS" = "true" ]; then
-            echo "Configuring test environment variables..."
-            
-            if [ -n "$TEST_XMLA_ENDPOINT" ]; then
-              echo "TEST_XMLA_ENDPOINT=$TEST_XMLA_ENDPOINT" >> $GITHUB_ENV
-              echo "SUCCESS: Test XMLA endpoint configured"
-            else
-              echo "WARNING: TEST_XMLA_ENDPOINT not configured - required for integration tests"
-            fi
-            
-            if [ -n "$TEST_TENANT_ID" ]; then
-              echo "TEST_TENANT_ID=$TEST_TENANT_ID" >> $GITHUB_ENV
-              echo "SUCCESS: Test Tenant ID configured"
-            else
-              echo "WARNING: TEST_TENANT_ID not configured - required for integration tests"
-            fi
-            
-            if [ -n "$TEST_CLIENT_ID" ]; then
-              echo "TEST_CLIENT_ID=$TEST_CLIENT_ID" >> $GITHUB_ENV
-              echo "SUCCESS: Test Client ID configured"
-            else
-              echo "WARNING: TEST_CLIENT_ID not configured - required for integration tests"
-            fi
-            
-            if [ -n "$TEST_CLIENT_SECRET" ]; then
-              echo "TEST_CLIENT_SECRET=$TEST_CLIENT_SECRET" >> $GITHUB_ENV
-              echo "SUCCESS: Test Client Secret configured"
-            else
-              echo "WARNING: TEST_CLIENT_SECRET not configured - required for integration tests"
-            fi
-            
-            if [ -n "$TEST_INITIAL_CATALOG" ]; then
-              echo "TEST_INITIAL_CATALOG=$TEST_INITIAL_CATALOG" >> $GITHUB_ENV
-              echo "SUCCESS: Test Initial Catalog configured"
-            else
-              echo "WARNING: TEST_INITIAL_CATALOG not configured - required for integration tests"
-            fi
-            
-            if [ -n "$TEST_EXPECTED_TABLE" ]; then
-              echo "TEST_EXPECTED_TABLE=$TEST_EXPECTED_TABLE" >> $GITHUB_ENV
-              echo "SUCCESS: Test Expected Table configured"
-            else
-              echo "INFO: TEST_EXPECTED_TABLE not configured - optional"
-            fi
-            
-            if [ -n "$TEST_EXPECTED_COLUMN" ]; then
-              echo "TEST_EXPECTED_COLUMN=$TEST_EXPECTED_COLUMN" >> $GITHUB_ENV
-              echo "SUCCESS: Test Expected Column configured"
-            else
-              echo "INFO: TEST_EXPECTED_COLUMN not configured - optional"
-            fi
-            
-            if [ -n "$TEST_DAX_QUERY" ]; then
-              # Use here-doc for multiline values
-              echo "TEST_DAX_QUERY<<EOF" >> "$GITHUB_ENV"
-              echo "$TEST_DAX_QUERY" >> "$GITHUB_ENV"
-              echo "EOF" >> "$GITHUB_ENV"
-              echo "SUCCESS: Test DAX Query configured"
-            else
-              echo "INFO: TEST_DAX_QUERY not configured - optional"
-            fi
-            
-            if [ -n "$TEST_MIN_TABLES_COUNT" ]; then
-              echo "TEST_MIN_TABLES_COUNT=$TEST_MIN_TABLES_COUNT" >> $GITHUB_ENV
-              echo "SUCCESS: Test Min Tables Count configured"
-            else
-              echo "INFO: TEST_MIN_TABLES_COUNT not configured - optional"
-            fi
-          else
-            echo "INFO: Integration tests disabled - skipping test configuration"
-          fi
-          
-          # Logging Configuration (variable, with default)
-          if [ -z "$LOG_LEVEL" ]; then
-            LOG_LEVEL="INFO"
-          fi
-          echo "LOG_LEVEL=$LOG_LEVEL" >> $GITHUB_ENV
-          echo "SUCCESS: Log level configured: $LOG_LEVEL"
-          
-          echo "SUCCESS: All environment variables configured from secrets and variables"
-
-      - name: Configure .NET Environment Variables
-        run: |
-          # Source the ADOMD activation script if it exists and export to GITHUB_ENV
-          if [ -f "$HOME/.local/lib/adomd/activate_adomd_env.sh" ]; then
-            echo "Sourcing ADOMD environment activation script..."
-            source "$HOME/.local/lib/adomd/activate_adomd_env.sh"
-            echo "DOTNET_ROOT=$DOTNET_ROOT" >> $GITHUB_ENV
-            echo "PYTHONNET_RUNTIME=$PYTHONNET_RUNTIME" >> $GITHUB_ENV
-            echo "ADOMD_LIB_DIR=$ADOMD_LIB_DIR" >> $GITHUB_ENV
-            echo "ADOMD_LIB_PATH=$ADOMD_LIB_PATH" >> $GITHUB_ENV
-            echo "$DOTNET_ROOT" >> $GITHUB_PATH
-            echo "SUCCESS: ADOMD environment configured"
-          else
-            echo "Setting up basic .NET environment variables..."
-            echo "DOTNET_ROOT=$HOME/.local/dotnet" >> $GITHUB_ENV
-            echo "PYTHONNET_RUNTIME=coreclr" >> $GITHUB_ENV
-            echo "ADOMD_LIB_DIR=$HOME/.local/lib/adomd/lib/netcoreapp3.0" >> $GITHUB_ENV
-            echo "$HOME/.local/dotnet" >> $GITHUB_PATH
-            echo "SUCCESS: Basic .NET environment configured"
-          fi
-
-      - name: Test Environment Setup
-        env:
-          # .NET Configuration
-          DOTNET_ROOT: ${{ env.DOTNET_ROOT }}
-          PYTHONNET_RUNTIME: ${{ env.PYTHONNET_RUNTIME }}
-          ADOMD_LIB_DIR: ${{ env.ADOMD_LIB_DIR }}
-          ADOMD_LIB_PATH: ${{ env.ADOMD_LIB_PATH }}
-          # OpenAI Configuration
-          OPENAI_API_KEY: ${{ env.OPENAI_API_KEY }}
-          OPENAI_MODEL: ${{ env.OPENAI_MODEL }}
-          # Power BI Configuration
-          DEFAULT_TENANT_ID: ${{ env.DEFAULT_TENANT_ID }}
-          DEFAULT_CLIENT_ID: ${{ env.DEFAULT_CLIENT_ID }}
-          DEFAULT_CLIENT_SECRET: ${{ env.DEFAULT_CLIENT_SECRET }}
-          # Logging
-          LOG_LEVEL: ${{ env.LOG_LEVEL }}
-        run: |
-          echo "Testing Python environment..."
-          python --version
-          
-          echo "Testing .NET environment..."
-          echo "DOTNET_ROOT=$DOTNET_ROOT"
-          echo "PYTHONNET_RUNTIME=$PYTHONNET_RUNTIME"
-          echo "ADOMD_LIB_DIR=$ADOMD_LIB_DIR"
-          
-          echo "Testing required packages..."
-          python -c "
-          import sys
-          sys.path.insert(0, 'src')
-          
-          try:
-              import mcp
-              print('SUCCESS: MCP package available')
-          except ImportError as e:
-              print(f'ERROR: MCP package issue: {e}')
-              
-          try:
-              import pyadomd
-              print('SUCCESS: pyadomd package available')
-          except ImportError as e:
-              print(f'ERROR: pyadomd package issue: {e}')
-              
-          try:
-              import pythonnet
-              print('SUCCESS: pythonnet package available')
-          except ImportError as e:
-              print(f'ERROR: pythonnet package issue: {e}')
-              
-          try:
-              import openai
-              print('SUCCESS: OpenAI package available')
-          except ImportError as e:
-              print(f'ERROR: OpenAI package issue: {e}')
-          "
-          
-          echo "Testing server import..."
-          python -c "
-          import sys
-          sys.path.insert(0, 'src')
-          try:
-              from server import PowerBIMCPServer
-              print('SUCCESS: PowerBI MCP Server can be imported')
-          except Exception as e:
-              print(f'ERROR: Server import issue: {e}')
-          "
-
-      - name: Setup Development Tools
-        run: |
-          echo "Setting up development tools..."
-          
-          # Test black formatting
-          python -m black --check src/ tests/ --diff || echo "Run 'python -m black src/ tests/' to format code"
-          
-          # Test flake8 linting
-          python -m flake8 src/ tests/ || echo "Code linting issues found"
-          
-          # Test mypy type checking
-          python -m mypy src/ || echo "Type checking issues found"
-          
-          echo "SUCCESS: Development tools configured"
-        continue-on-error: true
-
-      - name: Run Unit Tests
-        env:
-          # .NET Configuration
-          DOTNET_ROOT: ${{ env.DOTNET_ROOT }}
-          PYTHONNET_RUNTIME: ${{ env.PYTHONNET_RUNTIME }}
-          ADOMD_LIB_DIR: ${{ env.ADOMD_LIB_DIR }}
-          ADOMD_LIB_PATH: ${{ env.ADOMD_LIB_PATH }}
-          # OpenAI Configuration
-          OPENAI_API_KEY: ${{ env.OPENAI_API_KEY }}
-          OPENAI_MODEL: ${{ env.OPENAI_MODEL }}
-          # Power BI Configuration
-          DEFAULT_TENANT_ID: ${{ env.DEFAULT_TENANT_ID }}
-          DEFAULT_CLIENT_ID: ${{ env.DEFAULT_CLIENT_ID }}
-          DEFAULT_CLIENT_SECRET: ${{ env.DEFAULT_CLIENT_SECRET }}
-          # Logging
-          LOG_LEVEL: ${{ env.LOG_LEVEL }}
-        run: |
-          echo "Running unit tests to verify environment..."
-          python -m pytest tests/ -k "not test_integration" -v
-        continue-on-error: true
-
-      - name: Run Integration Tests
-        if: env.ENABLE_INTEGRATION_TESTS == 'true'
-        env:
-          # .NET Configuration
-          DOTNET_ROOT: ${{ env.DOTNET_ROOT }}
-          PYTHONNET_RUNTIME: ${{ env.PYTHONNET_RUNTIME }}
-          ADOMD_LIB_DIR: ${{ env.ADOMD_LIB_DIR }}
-          ADOMD_LIB_PATH: ${{ env.ADOMD_LIB_PATH }}
-          # OpenAI Configuration
-          OPENAI_API_KEY: ${{ env.OPENAI_API_KEY }}
-          OPENAI_MODEL: ${{ env.OPENAI_MODEL }}
-          # Power BI Configuration
-          DEFAULT_TENANT_ID: ${{ env.DEFAULT_TENANT_ID }}
-          DEFAULT_CLIENT_ID: ${{ env.DEFAULT_CLIENT_ID }}
-          DEFAULT_CLIENT_SECRET: ${{ env.DEFAULT_CLIENT_SECRET }}
-          # Test Configuration
-          ENABLE_INTEGRATION_TESTS: ${{ env.ENABLE_INTEGRATION_TESTS }}
-          TEST_XMLA_ENDPOINT: ${{ env.TEST_XMLA_ENDPOINT }}
-          TEST_TENANT_ID: ${{ env.TEST_TENANT_ID }}
-          TEST_CLIENT_ID: ${{ env.TEST_CLIENT_ID }}
-          TEST_CLIENT_SECRET: ${{ env.TEST_CLIENT_SECRET }}
-          TEST_INITIAL_CATALOG: ${{ env.TEST_INITIAL_CATALOG }}
-          TEST_EXPECTED_TABLE: ${{ env.TEST_EXPECTED_TABLE }}
-          TEST_EXPECTED_COLUMN: ${{ env.TEST_EXPECTED_COLUMN }}
-          TEST_DAX_QUERY: ${{ env.TEST_DAX_QUERY }}
-          TEST_MIN_TABLES_COUNT: ${{ env.TEST_MIN_TABLES_COUNT }}
-          # Logging
-          LOG_LEVEL: ${{ env.LOG_LEVEL }}
-        run: |
-          echo "Running integration tests..."
-          python run_integration_tests.py --yes
-        continue-on-error: true
+          install-mode: "user"  # User installation for Copilot environment
+          environment-type: "copilot"
+          # Pass secrets and variables as inputs
+          openai-api-key: ${{ secrets.OPENAI_API_KEY }}
+          default-tenant-id: ${{ secrets.DEFAULT_TENANT_ID }}
+          default-client-id: ${{ secrets.DEFAULT_CLIENT_ID }}
+          default-client-secret: ${{ secrets.DEFAULT_CLIENT_SECRET }}
+          openai-model: ${{ vars.OPENAI_MODEL }}
+          log-level: ${{ vars.LOG_LEVEL }}

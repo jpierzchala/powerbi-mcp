@@ -1,0 +1,185 @@
+name: 'Setup PowerBI MCP Environment'
+description: 'Sets up consistent PowerBI MCP development environment across all workflows'
+
+inputs:
+  python-version:
+    description: 'Python version to install'
+    required: false
+    default: '3.11'
+  install-mode:
+    description: 'Installation mode for ADOMD.NET (system or user)'
+    required: false
+    default: 'user'
+  environment-type:
+    description: 'Environment type (copilot, ci, docker)'
+    required: false
+    default: 'ci'
+  # Application environment variables (passed from calling workflow)
+  openai-api-key:
+    description: 'OpenAI API key'
+    required: false
+  default-tenant-id:
+    description: 'Default Power BI tenant ID'
+    required: false  
+  default-client-id:
+    description: 'Default Power BI client ID'
+    required: false
+  default-client-secret:
+    description: 'Default Power BI client secret'
+    required: false
+  openai-model:
+    description: 'OpenAI model to use'
+    required: false
+    default: 'gpt-4o-mini'
+  log-level:
+    description: 'Log level'
+    required: false
+    default: 'INFO'
+
+outputs:
+  dotnet-root:
+    description: 'Path to .NET installation'
+    value: ${{ steps.configure-dotnet.outputs.dotnet-root }}
+  pythonnet-runtime:
+    description: 'Pythonnet runtime configured'
+    value: ${{ steps.configure-dotnet.outputs.pythonnet-runtime }}
+
+runs:
+  using: 'composite'
+  steps:
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: ${{ inputs.python-version }}
+        cache: 'pip'
+
+    - name: Install .NET Runtime and ADOMD.NET Dependencies
+      shell: bash
+      run: |
+        echo "Installing .NET and ADOMD.NET using shared script..."
+        chmod +x scripts/install_dotnet_adomd.sh
+        ./scripts/install_dotnet_adomd.sh --${{ inputs.install-mode }}
+
+    - name: Install Python Dependencies
+      shell: bash
+      run: |
+        echo "Installing Python dependencies..."
+        python -m pip install --upgrade pip
+        pip install --no-cache-dir -r requirements.txt
+        # Install development tools for linting and testing
+        pip install flake8 black isort mypy
+
+    - name: Configure .NET Environment
+      id: configure-dotnet
+      shell: bash
+      run: |
+        echo "Configuring .NET environment variables..."
+        
+        # Determine installation path based on mode
+        if [ "${{ inputs.install-mode }}" = "system" ]; then
+          DOTNET_BASE="/usr/share/dotnet"
+          ADOMD_BASE="/usr/local/lib/adomd"
+        else
+          DOTNET_BASE="$HOME/.local/dotnet"
+          ADOMD_BASE="$HOME/.local/lib/adomd"
+        fi
+        
+        # Source the ADOMD activation script if it exists
+        ADOMD_ACTIVATE_SCRIPT="$ADOMD_BASE/activate_adomd_env.sh"
+        if [ -f "$ADOMD_ACTIVATE_SCRIPT" ]; then
+          echo "Sourcing ADOMD environment activation script..."
+          source "$ADOMD_ACTIVATE_SCRIPT"
+          echo "DOTNET_ROOT=$DOTNET_ROOT" >> $GITHUB_ENV
+          echo "PYTHONNET_RUNTIME=$PYTHONNET_RUNTIME" >> $GITHUB_ENV
+          echo "ADOMD_LIB_DIR=$ADOMD_LIB_DIR" >> $GITHUB_ENV
+          echo "ADOMD_LIB_PATH=$ADOMD_LIB_PATH" >> $GITHUB_ENV
+          echo "$DOTNET_ROOT" >> $GITHUB_PATH
+          
+          # Set outputs
+          echo "dotnet-root=$DOTNET_ROOT" >> $GITHUB_OUTPUT
+          echo "pythonnet-runtime=$PYTHONNET_RUNTIME" >> $GITHUB_OUTPUT
+        else
+          echo "Setting up basic .NET environment variables..."
+          echo "DOTNET_ROOT=$DOTNET_BASE" >> $GITHUB_ENV
+          echo "PYTHONNET_RUNTIME=coreclr" >> $GITHUB_ENV
+          echo "ADOMD_LIB_DIR=$ADOMD_BASE/lib/netcoreapp3.0" >> $GITHUB_ENV
+          echo "$DOTNET_BASE" >> $GITHUB_PATH
+          
+          # Set outputs
+          echo "dotnet-root=$DOTNET_BASE" >> $GITHUB_OUTPUT
+          echo "pythonnet-runtime=coreclr" >> $GITHUB_OUTPUT
+        fi
+        
+        echo "SUCCESS: .NET environment configured for ${{ inputs.environment-type }}"
+
+    - name: Configure Application Environment Variables
+      shell: bash
+      run: |
+        echo "Configuring application environment variables for ${{ inputs.environment-type }}..."
+        
+        # OpenAI Configuration
+        OPENAI_MODEL="${{ inputs.openai-model }}"
+        echo "OPENAI_MODEL=$OPENAI_MODEL" >> $GITHUB_ENV
+        
+        if [ -n "${{ inputs.openai-api-key }}" ]; then
+          echo "OPENAI_API_KEY=${{ inputs.openai-api-key }}" >> $GITHUB_ENV
+          echo "SUCCESS: OpenAI API key configured"
+        else
+          echo "INFO: OpenAI API key not configured - optional"
+        fi
+        
+        # Power BI Credentials (optional for basic functionality)
+        if [ -n "${{ inputs.default-tenant-id }}" ]; then
+          echo "DEFAULT_TENANT_ID=${{ inputs.default-tenant-id }}" >> $GITHUB_ENV
+          echo "SUCCESS: Default Tenant ID configured"
+        fi
+        
+        if [ -n "${{ inputs.default-client-id }}" ]; then
+          echo "DEFAULT_CLIENT_ID=${{ inputs.default-client-id }}" >> $GITHUB_ENV
+          echo "SUCCESS: Default Client ID configured"  
+        fi
+        
+        if [ -n "${{ inputs.default-client-secret }}" ]; then
+          echo "DEFAULT_CLIENT_SECRET=${{ inputs.default-client-secret }}" >> $GITHUB_ENV
+          echo "SUCCESS: Default Client Secret configured"
+        fi
+        
+        # Logging Configuration
+        LOG_LEVEL="${{ inputs.log-level }}"
+        echo "LOG_LEVEL=$LOG_LEVEL" >> $GITHUB_ENV
+        echo "SUCCESS: Log level configured: $LOG_LEVEL"
+
+    - name: Verify Environment Setup
+      shell: bash
+      run: |
+        echo "=== Environment Verification ==="
+        echo "Python version: $(python --version)"
+        echo "DOTNET_ROOT: $DOTNET_ROOT"
+        echo "PYTHONNET_RUNTIME: $PYTHONNET_RUNTIME"
+        echo "OPENAI_MODEL: $OPENAI_MODEL"
+        echo "LOG_LEVEL: $LOG_LEVEL"
+        
+        echo "=== Testing Python Package Imports ==="
+        python -c "
+        import sys
+        sys.path.insert(0, 'src')
+        
+        packages = [('mcp', 'MCP package'), ('pyadomd', 'pyadomd package'), ('pythonnet', 'pythonnet package'), ('openai', 'OpenAI package')]
+        
+        for package, description in packages:
+            try:
+                __import__(package)
+                print(f'SUCCESS: {description} available')
+            except ImportError as e:
+                print(f'INFO: {description} issue: {e}')
+        
+        # Test server import
+        try:
+            from server import PowerBIMCPServer
+            print('SUCCESS: PowerBI MCP Server can be imported')
+        except Exception as e:
+            print(f'INFO: Server import issue: {e}')
+        "
+        
+        echo "=== Environment Setup Complete ==="
+        echo "SUCCESS: PowerBI MCP environment ready for ${{ inputs.environment-type }}"
