@@ -112,10 +112,8 @@ import sys
 import pythonnet
 
 # Choose appropriate runtime based on platform
-if platform.system() == "Linux":
-    pythonnet_runtime = os.environ.get("PYTHONNET_RUNTIME", "coreclr")
-else:
-    pythonnet_runtime = os.environ.get("PYTHONNET_RUNTIME", "netfx")
+# Use coreclr by default on all platforms as it works with our NuGet packages
+pythonnet_runtime = os.environ.get("PYTHONNET_RUNTIME", "coreclr")
 
 logger.info("Configuring pythonnet runtime: %s for %s", pythonnet_runtime, platform.system())
 try:
