@@ -3,7 +3,6 @@ import subprocess
 import sys
 import time
 
-import httpx
 import pytest
 
 
@@ -18,20 +17,22 @@ def test_server_stays_running():
         [
             sys.executable,
             os.path.join(os.path.dirname(__file__), "..", "..", "src", "server.py"),
+            "--port", "8123"  # Explicitly pass port argument
         ],
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
         env=env,
     )
     try:
-        # Wait for server to start
-        for _ in range(10):
-            try:
-                httpx.get("http://127.0.0.1:8123/", timeout=1)
-                break
-            except Exception:
-                time.sleep(0.5)
-        assert proc.poll() is None
+        # Wait a bit for server to initialize, then check it's still running
+        for i in range(5):  # 5 seconds should be enough for initialization
+            if proc.poll() is not None:
+                stdout, stderr = proc.communicate()
+                assert False, f"Server process died unexpectedly after {i}s: {stderr.decode()}"
+            time.sleep(1.0)
+            
+        # Final check - server should still be running after 5 seconds
+        assert proc.poll() is None, "Server process should still be running"
     finally:
         proc.terminate()
         try:
