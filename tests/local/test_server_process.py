@@ -7,8 +7,6 @@ import pytest
 
 
 @pytest.mark.local
-
-
 def test_server_stays_running():
     env = os.environ.copy()
     env.setdefault("MCP_PERSIST", "1")
