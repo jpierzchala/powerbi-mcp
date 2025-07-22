@@ -83,8 +83,7 @@ jobs:
 
   integration-tests:
     runs-on: ubuntu-latest
-    # Only run integration tests on push to master and require local tests to pass
-    if: github.event_name == 'push' && github.ref == 'refs/heads/master'
+    # Run integration tests on both pull requests and push to master
     needs: [unit-tests, local-tests]
     
     steps:
