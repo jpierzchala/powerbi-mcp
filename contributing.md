@@ -143,6 +143,53 @@ def test_power_bi_connection():
         assert connector.connected is True
 ```
 
+### Power BI DMV Query Limitations
+
+When working with Power BI Dynamic Management Views (DMVs) through the `$SYSTEM.TMSCHEMA_*` tables, be aware of the following limitations imposed by the Data Mining parser:
+
+- **No JOIN operations**: Cannot use INNER JOIN, LEFT JOIN, etc. between DMV tables
+- **No GROUP BY**: Cannot aggregate data using GROUP BY clauses
+- **No LIKE operator**: Cannot use pattern matching with LIKE
+- **No CAST or CONVERT**: Cannot convert data types in queries
+- **No IN clauses**: Cannot use `WHERE column IN (value1, value2, ...)`
+- **Limited WHERE clauses**: Only basic equality and comparison operators are supported
+
+**Example of valid DMV queries:**
+```sql
+-- Valid: Simple SELECT with WHERE
+SELECT [Name], [Description] FROM $SYSTEM.TMSCHEMA_TABLES WHERE [Name] = 'Sales'
+
+-- Valid: SELECT all records
+SELECT [FromTableID], [ToTableID] FROM $SYSTEM.TMSCHEMA_RELATIONSHIPS
+```
+
+**Examples of invalid DMV queries:**
+```sql
+-- Invalid: JOIN not supported
+SELECT t.[Name], r.[FromTableID] 
+FROM $SYSTEM.TMSCHEMA_TABLES t 
+JOIN $SYSTEM.TMSCHEMA_RELATIONSHIPS r ON t.[ID] = r.[FromTableID]
+
+-- Invalid: GROUP BY not supported
+SELECT [TableID], COUNT(*) FROM $SYSTEM.TMSCHEMA_COLUMNS GROUP BY [TableID]
+
+-- Invalid: LIKE not supported
+SELECT [Name] FROM $SYSTEM.TMSCHEMA_TABLES WHERE [Name] LIKE 'Sales%'
+
+-- Invalid: IN clause not supported
+SELECT [Name] FROM $SYSTEM.TMSCHEMA_TABLES WHERE [ID] IN (1, 2, 3)
+```
+
+**Performance Optimization Strategies:**
+
+Due to these limitations, relationship data retrieval requires multiple separate queries and post-processing in application code:
+
+1. **Batch Fetching**: Get all tables, columns, and relationships in separate bulk queries
+2. **In-Memory Mapping**: Build lookup dictionaries to map IDs to names
+3. **Minimize Round Trips**: Fetch all required data upfront rather than making individual queries per table
+
+This is why methods like `_get_all_relationships()` fetch all relationship data at once and then filter/map it in Python rather than using complex SQL queries.
+
 ## Documentation
 
 ### Docstring Format

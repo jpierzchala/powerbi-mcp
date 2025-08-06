@@ -243,6 +243,8 @@ class PowerBIConnector:
                 adomd_connection = pyadomd_conn.conn
                 tables_dataset = adomd_connection.GetSchemaDataSet(AdomdSchemaGuid.Tables, None)
 
+                # First, collect all user-facing table names
+                user_table_names = []
                 tables_list_obj = getattr(tables_dataset, "Tables", None)
                 if tables_list_obj and len(tables_list_obj) > 0:
                     schema_table = tables_list_obj[0]
@@ -253,22 +255,28 @@ class PowerBIConnector:
                             and not table_name.startswith("DateTableTemplate_")
                             and not row["TABLE_SCHEMA"] == "$SYSTEM"
                         ):
-                            # Get table description from TMSCHEMA_TABLES
-                            table_description = self._get_table_description_direct(table_name)
+                            user_table_names.append(table_name)
 
-                            # Get relationships for this table
-                            table_relationships = self._get_table_relationships(table_name)
+                # Batch fetch descriptions and relationships for performance
+                logger.info(f"Fetching metadata for {len(user_table_names)} tables using optimized batch queries")
+                table_descriptions = self._get_all_table_descriptions(user_table_names)
+                table_relationships = self._get_all_relationships(user_table_names)
 
-                            tables_list.append(
-                                {
-                                    "name": table_name,
-                                    "description": table_description or "No description available",
-                                    "relationships": table_relationships,
-                                }
-                            )
+                # Build the final tables list
+                for table_name in user_table_names:
+                    description = table_descriptions.get(table_name) or "No description available"
+                    relationships = table_relationships.get(table_name, [])
+
+                    tables_list.append(
+                        {
+                            "name": table_name,
+                            "description": description,
+                            "relationships": relationships,
+                        }
+                    )
 
             self.tables = tables_list
-            logger.info(f"Discovered {len(tables_list)} tables with relationships")
+            logger.info(f"Discovered {len(tables_list)} tables with relationships using optimized queries")
             return tables_list
         except Exception as e:
             logger.error(f"Failed to discover tables: {str(e)}")
@@ -574,6 +582,139 @@ class PowerBIConnector:
 
             logger.debug(f"Traceback: {traceback.format_exc()}")
             return []
+
+    def _get_all_table_descriptions(self, table_names: List[str]) -> Dict[str, Optional[str]]:
+        """Get descriptions for all tables in a single query for performance"""
+        try:
+            with Pyadomd(self.connection_string) as conn:
+                cursor = conn.cursor()
+                # Get all table descriptions in one query
+                # Note: DMV queries don't support IN clauses, so we need to be creative
+                desc_query = "SELECT [Name], [Description] FROM $SYSTEM.TMSCHEMA_TABLES"
+                logger.debug(f"Batch descriptions query: {desc_query}")
+                cursor.execute(desc_query)
+                results = cursor.fetchall()
+                cursor.close()
+
+                # Build a mapping of table name to description
+                descriptions = {}
+                for result in results:
+                    table_name = result[0] if result[0] else None
+                    description = result[1] if len(result) > 1 and result[1] else None
+                    if table_name:
+                        descriptions[table_name] = description
+
+                # Return only descriptions for requested tables
+                return {name: descriptions.get(name) for name in table_names}
+
+        except Exception as e:
+            logger.warning(f"Failed to get batch table descriptions: {str(e)}")
+            # Fallback to individual queries if batch fails
+            return {name: self._get_table_description_direct(name) for name in table_names}
+
+    def _get_all_relationships(self, table_names: List[str]) -> Dict[str, List[Dict[str, Any]]]:
+        """Get relationships for all tables in optimized batch queries"""
+        try:
+            with Pyadomd(self.connection_string) as conn:
+                # First, get all table name-to-ID mappings
+                cursor = conn.cursor()
+                table_map_query = "SELECT [Name], [ID] FROM $SYSTEM.TMSCHEMA_TABLES"
+                cursor.execute(table_map_query)
+                table_map_results = cursor.fetchall()
+                cursor.close()
+
+                table_name_to_id = {}
+                table_id_to_name = {}
+                for result in table_map_results:
+                    name, table_id = result[0], result[1]
+                    if name:
+                        table_name_to_id[name] = table_id
+                        table_id_to_name[table_id] = name
+
+                # Get all column name-to-ID mappings
+                cursor = conn.cursor()
+                column_map_query = "SELECT [ID], [ExplicitName], [TableID] FROM $SYSTEM.TMSCHEMA_COLUMNS"
+                cursor.execute(column_map_query)
+                column_map_results = cursor.fetchall()
+                cursor.close()
+
+                column_id_to_info = {}
+                for result in column_map_results:
+                    col_id, col_name, table_id = result[0], result[1], result[2]
+                    if col_id and col_name:
+                        column_id_to_info[col_id] = {"name": col_name, "table_id": table_id}
+
+                # Get all relationships in one query
+                cursor = conn.cursor()
+                relationships_query = """
+                SELECT
+                    [FromTableID], [ToTableID], [FromColumnID], [ToColumnID],
+                    [IsActive], [Type], [CrossFilteringBehavior],
+                    [FromCardinality], [ToCardinality]
+                FROM $SYSTEM.TMSCHEMA_RELATIONSHIPS
+                """
+                cursor.execute(relationships_query)
+                all_relationships = cursor.fetchall()
+                cursor.close()
+
+                # Build relationships mapping for requested tables
+                table_relationships = {name: [] for name in table_names}
+
+                for rel in all_relationships:
+                    from_table_id, to_table_id = rel[0], rel[1]
+                    from_col_id, to_col_id = rel[2], rel[3]
+                    is_active, cross_filter = rel[4], rel[6]  # Skip rel[5] (Type) as it's not used
+                    from_cardinality, to_cardinality = rel[7], rel[8]
+
+                    from_table_name = table_id_to_name.get(from_table_id)
+                    to_table_name = table_id_to_name.get(to_table_id)
+
+                    if not from_table_name or not to_table_name:
+                        continue
+
+                    from_col_info = column_id_to_info.get(from_col_id)
+                    to_col_info = column_id_to_info.get(to_col_id)
+
+                    if not from_col_info or not to_col_info:
+                        continue
+
+                    from_col_name = from_col_info["name"]
+                    to_col_name = to_col_info["name"]
+
+                    # Add relationship from the "Many" side (from_table)
+                    if from_table_name in table_relationships:
+                        table_relationships[from_table_name].append(
+                            {
+                                "relatedTable": to_table_name,
+                                "fromColumn": from_col_name,
+                                "toColumn": to_col_name,
+                                "cardinality": self._format_cardinality(from_cardinality, to_cardinality),
+                                "isActive": bool(is_active),
+                                "crossFilterDirection": self._format_cross_filter(cross_filter),
+                                "relationshipType": "Many-to-One",
+                            }
+                        )
+
+                    # Add relationship from the "One" side (to_table)
+                    if to_table_name in table_relationships:
+                        table_relationships[to_table_name].append(
+                            {
+                                "relatedTable": from_table_name,
+                                "fromColumn": to_col_name,  # Current table column
+                                "toColumn": from_col_name,  # Related table column
+                                "cardinality": self._format_cardinality(to_cardinality, from_cardinality),
+                                "isActive": bool(is_active),
+                                "crossFilterDirection": self._format_cross_filter(cross_filter),
+                                "relationshipType": "One-to-Many",
+                            }
+                        )
+
+                return table_relationships
+
+        except Exception as e:
+            logger.warning(f"Failed to get batch relationships: {str(e)}")
+            # Fallback to individual queries if batch fails
+            return {name: self._get_table_relationships(name) for name in table_names}
 
     def _get_column_descriptions(self, table_name: str) -> List[Dict[str, Any]]:
         """Get column descriptions for a specific table"""
