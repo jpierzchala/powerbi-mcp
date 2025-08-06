@@ -77,7 +77,7 @@ class TestPowerBIConnector:
         assert connector.connected is False
 
     def test_discover_tables(self, connector, mock_pyadomd):
-        """Test table discovery with relationships"""
+        """Test table discovery with relationships using optimized batch methods"""
         # Arrange
         connector.connected = True
         connector.connection_string = "test"
@@ -99,11 +99,9 @@ class TestPowerBIConnector:
         mock_conn.conn.GetSchemaDataSet.return_value = mock_dataset
         mock_pyadomd.return_value.__enter__.return_value = mock_conn
 
-        # Mock the table description method to return None (no description)
-        connector._get_table_description_direct = Mock(return_value=None)
-
-        # Mock the relationships method to return empty list
-        connector._get_table_relationships = Mock(return_value=[])
+        # Mock the new batch methods
+        connector._get_all_table_descriptions = Mock(return_value={"Sales": None, "Product": None})
+        connector._get_all_relationships = Mock(return_value={"Sales": [], "Product": []})
 
         # Act
         tables = connector.discover_tables()
@@ -121,6 +119,99 @@ class TestPowerBIConnector:
         assert all("relationships" in table for table in tables)
         assert all(table["description"] == "No description available" for table in tables)
         assert all(table["relationships"] == [] for table in tables)
+
+        # Verify that batch methods were called with correct parameters
+        connector._get_all_table_descriptions.assert_called_once_with(["Sales", "Product"])
+        connector._get_all_relationships.assert_called_once_with(["Sales", "Product"])
+
+    def test_get_all_table_descriptions_batch(self, connector, mock_pyadomd):
+        """Test batch table descriptions fetching"""
+        # Arrange
+        connector.connected = True
+        connector.connection_string = "test"
+
+        mock_cursor = Mock()
+        mock_cursor.fetchall.return_value = [
+            ("Sales", "Sales data table"),
+            ("Product", None),  # No description
+            ("Customer", "Customer information"),
+        ]
+        mock_cursor.close = Mock()
+
+        mock_conn = Mock()
+        mock_conn.cursor.return_value = mock_cursor
+        mock_pyadomd.return_value.__enter__.return_value = mock_conn
+
+        # Act
+        result = connector._get_all_table_descriptions(["Sales", "Product"])
+
+        # Assert
+        assert result == {"Sales": "Sales data table", "Product": None}
+        mock_cursor.execute.assert_called_once()
+        mock_cursor.close.assert_called_once()
+
+    def test_get_all_relationships_batch(self, connector, mock_pyadomd):
+        """Test batch relationships fetching"""
+        # Arrange
+        connector.connected = True
+        connector.connection_string = "test"
+
+        # Mock multiple cursor calls for the batch method
+        mock_cursors = []
+
+        # First cursor: table mapping
+        mock_cursor1 = Mock()
+        mock_cursor1.fetchall.return_value = [
+            ("Sales", 1),
+            ("Product", 2),
+            ("Customer", 3),
+        ]
+        mock_cursor1.close = Mock()
+        mock_cursors.append(mock_cursor1)
+
+        # Second cursor: column mapping
+        mock_cursor2 = Mock()
+        mock_cursor2.fetchall.return_value = [
+            (10, "ProductKey", 1),  # Sales.ProductKey
+            (11, "CustomerKey", 1),  # Sales.CustomerKey
+            (20, "ProductKey", 2),  # Product.ProductKey
+            (30, "CustomerKey", 3),  # Customer.CustomerKey
+        ]
+        mock_cursor2.close = Mock()
+        mock_cursors.append(mock_cursor2)
+
+        # Third cursor: relationships
+        mock_cursor3 = Mock()
+        mock_cursor3.fetchall.return_value = [
+            # FromTableID, ToTableID, FromColumnID, ToColumnID, IsActive, Type, CrossFilter, FromCard, ToCard
+            (1, 2, 10, 20, True, 1, 1, 2, 1),  # Sales -> Product (Many-to-One)
+        ]
+        mock_cursor3.close = Mock()
+        mock_cursors.append(mock_cursor3)
+
+        mock_conn = Mock()
+        mock_conn.cursor.side_effect = mock_cursors
+        mock_pyadomd.return_value.__enter__.return_value = mock_conn
+
+        # Act
+        result = connector._get_all_relationships(["Sales", "Product"])
+
+        # Assert
+        assert "Sales" in result
+        assert "Product" in result
+
+        sales_rels = result["Sales"]
+        assert len(sales_rels) == 1
+        assert sales_rels[0]["relatedTable"] == "Product"
+        assert sales_rels[0]["fromColumn"] == "ProductKey"
+        assert sales_rels[0]["toColumn"] == "ProductKey"
+        assert sales_rels[0]["relationshipType"] == "Many-to-One"
+        assert sales_rels[0]["isActive"] is True
+
+        product_rels = result["Product"]
+        assert len(product_rels) == 1
+        assert product_rels[0]["relatedTable"] == "Sales"
+        assert product_rels[0]["relationshipType"] == "One-to-Many"
 
     def test_get_table_relationships_mock(self, connector):
         """Test table relationships discovery with mock method"""
