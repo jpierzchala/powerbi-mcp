@@ -13,8 +13,8 @@ from starlette.applications import Starlette
 from starlette.responses import Response
 from starlette.routing import Mount, Route
 
-from src.api.handlers import PowerBIHandlers
-from src.config.environment import logger
+from api.handlers import PowerBIHandlers
+from config.environment import logger
 
 # Updated imports
 try:

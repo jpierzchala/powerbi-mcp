@@ -5,8 +5,8 @@ from typing import Any, Dict, List
 
 import openai
 
-from src.utils.dax_utils import clean_dax_query
-from src.utils.json_encoder import safe_json_dumps
+from utils.dax_utils import clean_dax_query
+from utils.json_encoder import safe_json_dumps
 
 
 class DataAnalyzer:

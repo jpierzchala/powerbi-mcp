@@ -7,10 +7,10 @@ from typing import Any, Dict, List, Optional
 
 from mcp.types import TextContent
 
-from src.config.environment import logger
-from src.models.analyzer import DataAnalyzer
-from src.models.connector import PowerBIConnector
-from src.utils.json_encoder import safe_json_dumps
+from config.environment import logger
+from models.analyzer import DataAnalyzer
+from models.connector import PowerBIConnector
+from utils.json_encoder import safe_json_dumps
 
 
 class PowerBIHandlers:

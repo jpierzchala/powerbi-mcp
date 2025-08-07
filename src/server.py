@@ -6,13 +6,13 @@ import os
 import sys
 
 # Import and re-export main classes for backward compatibility with tests
-from src.api.server import PowerBIMCPServer
-from src.config.adomd_setup import initialize_adomd
-from src.config.environment import load_environment, logger
-from src.models.analyzer import DataAnalyzer
-from src.models.connector import PowerBIConnector
-from src.utils.dax_utils import clean_dax_query
-from src.utils.json_encoder import PowerBIJSONEncoder, safe_json_dumps
+from api.server import PowerBIMCPServer
+from config.adomd_setup import initialize_adomd
+from config.environment import load_environment, logger
+from models.analyzer import DataAnalyzer
+from models.connector import PowerBIConnector
+from utils.dax_utils import clean_dax_query
+from utils.json_encoder import PowerBIJSONEncoder, safe_json_dumps
 
 # Initialize ADOMD components for backward compatibility
 clr, Pyadomd, adomd_loaded, AdomdSchemaGuid = initialize_adomd()

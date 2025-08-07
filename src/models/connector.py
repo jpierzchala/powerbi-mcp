@@ -4,12 +4,25 @@ import asyncio
 from concurrent.futures import ThreadPoolExecutor
 from typing import Any, Dict, List, Optional
 
-from src.config.adomd_setup import initialize_adomd
-from src.config.environment import logger
-from src.utils.dax_utils import clean_dax_query
+from config.adomd_setup import initialize_adomd
+from config.environment import logger
+from utils.dax_utils import clean_dax_query
 
 # Initialize ADOMD components
 clr, Pyadomd, adomd_loaded, AdomdSchemaGuid = initialize_adomd()
+
+# For backward compatibility with tests, check if we should use server module variables
+try:
+    import server
+
+    # Use server variables if they exist (for test compatibility)
+    if hasattr(server, "Pyadomd"):
+        Pyadomd = server.Pyadomd
+    if hasattr(server, "AdomdSchemaGuid"):
+        AdomdSchemaGuid = server.AdomdSchemaGuid
+except ImportError:
+    # server module not available yet (during initial import), use local variables
+    pass
 
 
 class PowerBIConnector:
@@ -22,6 +35,16 @@ class PowerBIConnector:
         self.executor = ThreadPoolExecutor(max_workers=4)
 
     def _check_pyadomd(self):
+        # Import here to avoid circular import issues
+        global Pyadomd
+        try:
+            import server
+
+            if hasattr(server, "Pyadomd"):
+                Pyadomd = server.Pyadomd
+        except ImportError:
+            pass
+
         if Pyadomd is None:
             raise Exception("Pyadomd library not available. Ensure .NET runtime and ADOMD.NET are installed")
 
@@ -63,6 +86,18 @@ class PowerBIConnector:
 
         tables_list = []
         try:
+            global Pyadomd, AdomdSchemaGuid
+            # Update from server module if available
+            try:
+                import server
+
+                if hasattr(server, "Pyadomd"):
+                    Pyadomd = server.Pyadomd
+                if hasattr(server, "AdomdSchemaGuid"):
+                    AdomdSchemaGuid = server.AdomdSchemaGuid
+            except ImportError:
+                pass
+
             with Pyadomd(self.connection_string) as pyadomd_conn:
                 adomd_connection = pyadomd_conn.conn
                 tables_dataset = adomd_connection.GetSchemaDataSet(AdomdSchemaGuid.Tables, None)
@@ -114,6 +149,16 @@ class PowerBIConnector:
         self._check_pyadomd()
 
         try:
+            global Pyadomd
+            # Update from server module if available
+            try:
+                import server
+
+                if hasattr(server, "Pyadomd"):
+                    Pyadomd = server.Pyadomd
+            except ImportError:
+                pass
+
             with Pyadomd(self.connection_string) as conn:
                 cursor = conn.cursor()
 
@@ -188,6 +233,16 @@ class PowerBIConnector:
     def _get_table_description_direct(self, table_name: str) -> Optional[str]:
         """Get table description using direct Pyadomd connection"""
         try:
+            global Pyadomd
+            # Update from server module if available
+            try:
+                import server
+
+                if hasattr(server, "Pyadomd"):
+                    Pyadomd = server.Pyadomd
+            except ImportError:
+                pass
+
             with Pyadomd(self.connection_string) as conn:
                 cursor = conn.cursor()
                 # Try different approaches to get table description
@@ -227,6 +282,16 @@ class PowerBIConnector:
     def _get_table_relationships(self, table_name: str) -> List[Dict[str, Any]]:
         """Get relationships for a specific table"""
         try:
+            global Pyadomd
+            # Update from server module if available
+            try:
+                import server
+
+                if hasattr(server, "Pyadomd"):
+                    Pyadomd = server.Pyadomd
+            except ImportError:
+                pass
+
             with Pyadomd(self.connection_string) as conn:
                 # First get the table ID
                 cursor = conn.cursor()
@@ -410,6 +475,16 @@ class PowerBIConnector:
     def _get_all_table_descriptions(self, table_names: List[str]) -> Dict[str, Optional[str]]:
         """Get descriptions for all tables in a single query for performance"""
         try:
+            global Pyadomd
+            # Update from server module if available
+            try:
+                import server
+
+                if hasattr(server, "Pyadomd"):
+                    Pyadomd = server.Pyadomd
+            except ImportError:
+                pass
+
             with Pyadomd(self.connection_string) as conn:
                 cursor = conn.cursor()
                 # Get all table descriptions in one query
@@ -439,6 +514,16 @@ class PowerBIConnector:
     def _get_all_relationships(self, table_names: List[str]) -> Dict[str, List[Dict[str, Any]]]:
         """Get relationships for all tables in optimized batch queries"""
         try:
+            global Pyadomd
+            # Update from server module if available
+            try:
+                import server
+
+                if hasattr(server, "Pyadomd"):
+                    Pyadomd = server.Pyadomd
+            except ImportError:
+                pass
+
             with Pyadomd(self.connection_string) as conn:
                 # First, get all table name-to-ID mappings
                 cursor = conn.cursor()
@@ -543,6 +628,16 @@ class PowerBIConnector:
     def _get_column_descriptions(self, table_name: str) -> List[Dict[str, Any]]:
         """Get column descriptions for a specific table"""
         try:
+            global Pyadomd
+            # Update from server module if available
+            try:
+                import server
+
+                if hasattr(server, "Pyadomd"):
+                    Pyadomd = server.Pyadomd
+            except ImportError:
+                pass
+
             with Pyadomd(self.connection_string) as conn:
                 # First get the table ID
                 cursor = conn.cursor()
@@ -623,6 +718,16 @@ class PowerBIConnector:
 
         self._check_pyadomd()
         try:
+            global Pyadomd
+            # Update from server module if available
+            try:
+                import server
+
+                if hasattr(server, "Pyadomd"):
+                    Pyadomd = server.Pyadomd
+            except ImportError:
+                pass
+
             with Pyadomd(self.connection_string) as conn:
                 # Get table ID
                 id_cursor = conn.cursor()
@@ -665,6 +770,16 @@ class PowerBIConnector:
         logger.info(f"Executing DAX query: {cleaned_query}")
 
         try:
+            global Pyadomd
+            # Update from server module if available
+            try:
+                import server
+
+                if hasattr(server, "Pyadomd"):
+                    Pyadomd = server.Pyadomd
+            except ImportError:
+                pass
+
             with Pyadomd(self.connection_string) as conn:
                 cursor = conn.cursor()
                 cursor.execute(cleaned_query)
