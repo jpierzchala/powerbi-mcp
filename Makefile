@@ -29,11 +29,11 @@ install:
 
 # Run unit tests only
 test-unit:
-	python -m pytest tests/ -k "not test_integration" -v
+	PYTHONPATH=. python -m pytest tests/ -k "not test_integration" -v
 
 # Run all tests (unit + integration if enabled)
 test:
-	python -m pytest tests/ -v
+	PYTHONPATH=. python -m pytest tests/ -v
 
 # Run integration tests with interactive confirmation
 test-integration:
@@ -74,7 +74,7 @@ clean:
 
 # Run the server in development mode
 run:
-	python src/server.py
+	PYTHONPATH=. python src/server.py
 
 # Quick connection test
 quickstart:
