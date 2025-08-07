@@ -15,9 +15,15 @@ def setup_adomd_paths():
     # Try to use NuGet packages first (if available)
     user_nuget_path = os.path.expanduser(r"~\.nuget\packages")
     nuget_adomd_path = os.path.join(
-        user_nuget_path, "microsoft.analysisservices.adomdclient.netcore.retail.amd64", "19.84.1", "lib", "netcoreapp3.0"
+        user_nuget_path,
+        "microsoft.analysisservices.adomdclient.netcore.retail.amd64",
+        "19.84.1",
+        "lib",
+        "netcoreapp3.0",
     )
-    nuget_config_path = os.path.join(user_nuget_path, "system.configuration.configurationmanager", "9.0.7", "lib", "net8.0")
+    nuget_config_path = os.path.join(
+        user_nuget_path, "system.configuration.configurationmanager", "9.0.7", "lib", "net8.0"
+    )
     nuget_identity_path = os.path.join(user_nuget_path, "microsoft.identity.client", "4.74.0", "lib", "net8.0")
     nuget_identity_abs_path = os.path.join(
         user_nuget_path, "microsoft.identitymodel.abstractions", "6.35.0", "lib", "net6.0"
@@ -74,6 +80,7 @@ def setup_pythonnet():
 
 def load_adomd_assemblies(adomd_paths):
     """Load ADOMD.NET assemblies and return status."""
+
     # Placeholder for AdomdSchemaGuid if the assembly fails to load
     class _DummySchemaGuid:
         Tables = 0
@@ -141,14 +148,14 @@ def initialize_adomd():
     """Initialize ADOMD.NET components and return all necessary objects."""
     # Setup paths
     adomd_paths = setup_adomd_paths()
-    
+
     # Setup pythonnet
     setup_pythonnet()
-    
+
     # Import components
     clr, Pyadomd = import_pyadomd()
-    
+
     # Load assemblies
     adomd_loaded, AdomdSchemaGuid = load_adomd_assemblies(adomd_paths)
-    
+
     return clr, Pyadomd, adomd_loaded, AdomdSchemaGuid

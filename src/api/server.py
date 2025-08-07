@@ -13,8 +13,8 @@ from starlette.applications import Starlette
 from starlette.responses import Response
 from starlette.routing import Mount, Route
 
-from src.config.environment import logger
 from src.api.handlers import PowerBIHandlers
+from src.config.environment import logger
 
 # Updated imports
 try:
@@ -43,7 +43,12 @@ class PowerBIMCPServer:
         """Expose the connector for backward compatibility with tests."""
         return self.handlers.connector
 
-    @property 
+    @connector.setter
+    def connector(self, value):
+        """Allow setting the connector for backward compatibility with tests."""
+        self.handlers.connector = value
+
+    @property
     def analyzer(self):
         """Expose the analyzer for backward compatibility with tests."""
         return self.handlers.analyzer
@@ -53,9 +58,38 @@ class PowerBIMCPServer:
         """Expose the connection status for backward compatibility with tests."""
         return self.handlers.is_connected
 
+    @is_connected.setter
+    def is_connected(self, value):
+        """Allow setting the connection status for backward compatibility with tests."""
+        self.handlers.is_connected = value
+
     async def _async_prepare_context(self):
         """Expose the async prepare context method for backward compatibility with tests."""
         return await self.handlers._async_prepare_context()
+
+    async def _handle_connect(self, arguments):
+        """Expose the handle connect method for backward compatibility with tests."""
+        return await self.handlers.handle_connect(arguments)
+
+    async def _handle_list_tables(self):
+        """Expose the handle list tables method for backward compatibility with tests."""
+        return await self.handlers.handle_list_tables()
+
+    async def _handle_get_table_info(self, arguments):
+        """Expose the handle get table info method for backward compatibility with tests."""
+        return await self.handlers.handle_get_table_info(arguments)
+
+    async def _handle_query_data(self, arguments):
+        """Expose the handle query data method for backward compatibility with tests."""
+        return await self.handlers.handle_query_data(arguments)
+
+    async def _handle_execute_dax(self, arguments):
+        """Expose the handle execute dax method for backward compatibility with tests."""
+        return await self.handlers.handle_execute_dax(arguments)
+
+    async def _handle_suggest_questions(self):
+        """Expose the handle suggest questions method for backward compatibility with tests."""
+        return await self.handlers.handle_suggest_questions()
 
     def _openai_enabled(self) -> bool:
         """Return True if OpenAI features are enabled"""

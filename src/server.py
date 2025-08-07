@@ -5,12 +5,6 @@ import asyncio
 import os
 import sys
 
-# Add the src directory to the Python path for imports to work
-current_dir = os.path.dirname(os.path.abspath(__file__))
-src_dir = current_dir
-if src_dir not in sys.path:
-    sys.path.insert(0, src_dir)
-
 # Import and re-export main classes for backward compatibility with tests
 from src.api.server import PowerBIMCPServer
 from src.config.adomd_setup import initialize_adomd
@@ -25,16 +19,16 @@ clr, Pyadomd, adomd_loaded, AdomdSchemaGuid = initialize_adomd()
 
 # Re-export for backward compatibility
 __all__ = [
-    'PowerBIMCPServer',
-    'PowerBIConnector', 
-    'DataAnalyzer',
-    'clean_dax_query',
-    'safe_json_dumps',
-    'PowerBIJSONEncoder',
-    'Pyadomd',
-    'AdomdSchemaGuid',
-    'clr',
-    'adomd_loaded'
+    "PowerBIMCPServer",
+    "PowerBIConnector",
+    "DataAnalyzer",
+    "clean_dax_query",
+    "safe_json_dumps",
+    "PowerBIJSONEncoder",
+    "Pyadomd",
+    "AdomdSchemaGuid",
+    "clr",
+    "adomd_loaded",
 ]
 
 
@@ -43,7 +37,7 @@ async def main():
     """Main entry point for the PowerBI MCP Server."""
     # Load environment variables
     load_environment()
-    
+
     # Parse command line arguments
     parser = argparse.ArgumentParser(description="PowerBI MCP Server")
     parser.add_argument("--host", default=os.getenv("HOST", "0.0.0.0"), help="Host to bind to")
