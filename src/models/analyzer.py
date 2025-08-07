@@ -113,7 +113,12 @@ class DataAnalyzer:
         try:
             questions = json.loads(response.choices[0].message.content)
             return questions
-        except:
+        except (json.JSONDecodeError, KeyError, IndexError, AttributeError) as e:
+            # Handle various exceptions that could occur:
+            # - json.JSONDecodeError: Invalid JSON from OpenAI
+            # - KeyError/IndexError: Missing response structure
+            # - AttributeError: Missing attributes in response
+            logger.warning(f"Failed to parse OpenAI response for question generation: {e}")
             return [
                 "What are the total sales?",
                 "Show me the top 10 products",
