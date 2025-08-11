@@ -5,16 +5,17 @@ from typing import Any, Dict, List
 
 logger = logging.getLogger(__name__)
 
-# Import variables that will be set by server module
-Pyadomd = None
-
-try:
-    import server
-    if hasattr(server, "Pyadomd"):
-        Pyadomd = server.Pyadomd
-except ImportError:
-    # server module not available yet (during initial import), use local variables
-    pass
+# Always get variables from server module for test compatibility
+def _get_adomd_objects():
+    """Get ADOMD objects from server module for test compatibility."""
+    try:
+        import server
+        return server.Pyadomd
+    except ImportError:
+        # Fallback to direct import if server module not available
+        from config.adomd_setup import initialize_adomd
+        _, pyadomd, _, _ = initialize_adomd()
+        return pyadomd
 
 
 class RelationshipService:
@@ -31,14 +32,7 @@ class RelationshipService:
 
         self.connector._check_pyadomd()
         try:
-            global Pyadomd
-            # Update from server module if available
-            try:
-                import server
-                if hasattr(server, "Pyadomd"):
-                    Pyadomd = server.Pyadomd
-            except ImportError:
-                pass
+            Pyadomd = _get_adomd_objects()
 
             with Pyadomd(self.connector.connection_string) as conn:
                 cursor = conn.cursor()
@@ -103,87 +97,116 @@ class RelationshipService:
             return []
 
     def get_all_relationships(self, table_names: List[str]) -> Dict[str, List[Dict[str, Any]]]:
-        """Get all relationships for multiple tables in batch for performance"""
-        if not self.connector.connected:
-            return {}
-
+        """Get relationships for all tables in optimized batch queries"""
         try:
-            global Pyadomd
-            # Update from server module if available
-            try:
-                import server
-                if hasattr(server, "Pyadomd"):
-                    Pyadomd = server.Pyadomd
-            except ImportError:
-                pass
+            Pyadomd = _get_adomd_objects()
 
             with Pyadomd(self.connector.connection_string) as conn:
-                # Get all relationships in one query
-                table_names_str = "', '".join(table_names)
-                relationship_query = f"""
-                SELECT 
-                    ft.[Name] as FromTable,
-                    fc.[Name] as FromColumn, 
-                    tt.[Name] as ToTable,
-                    tc.[Name] as ToColumn,
-                    r.[FromCardinality],
-                    r.[ToCardinality],
-                    r.[CrossFilteringBehavior]
-                FROM $SYSTEM.TMSCHEMA_RELATIONSHIPS r
-                JOIN $SYSTEM.TMSCHEMA_COLUMNS fc ON r.[FromColumnID] = fc.[ID]
-                JOIN $SYSTEM.TMSCHEMA_TABLES ft ON fc.[TableID] = ft.[ID]
-                JOIN $SYSTEM.TMSCHEMA_COLUMNS tc ON r.[ToColumnID] = tc.[ID] 
-                JOIN $SYSTEM.TMSCHEMA_TABLES tt ON tc.[TableID] = tt.[ID]
-                WHERE ft.[Name] IN ('{table_names_str}') OR tt.[Name] IN ('{table_names_str}')
-                """
-                
+                # First, get all table name-to-ID mappings
                 cursor = conn.cursor()
-                cursor.execute(relationship_query)
-                results = cursor.fetchall()
+                table_map_query = "SELECT [Name], [ID] FROM $SYSTEM.TMSCHEMA_TABLES"
+                cursor.execute(table_map_query)
+                table_map_results = cursor.fetchall()
                 cursor.close()
-                
-                # Initialize relationships dict
-                relationships = {}
-                for table_name in table_names:
-                    relationships[table_name] = []
-                
-                # Process results
-                for result in results:
-                    from_table = result[0]
-                    from_column = result[1]
-                    to_table = result[2]
-                    to_column = result[3]
-                    from_cardinality = result[4]
-                    to_cardinality = result[5]
-                    cross_filter = result[6]
-                    
-                    # Add relationship to from_table (outgoing)
-                    if from_table in relationships:
-                        relationships[from_table].append({
-                            "direction": "outgoing",
-                            "related_table": to_table,
-                            "local_column": from_column,
-                            "related_column": to_column,
-                            "cardinality": self._format_cardinality(from_cardinality, to_cardinality),
-                            "cross_filter": self._format_cross_filter(cross_filter)
-                        })
-                    
-                    # Add relationship to to_table (incoming)
-                    if to_table in relationships:
-                        relationships[to_table].append({
-                            "direction": "incoming",
-                            "related_table": from_table,
-                            "local_column": to_column,
-                            "related_column": from_column,
-                            "cardinality": self._format_cardinality(from_cardinality, to_cardinality),
-                            "cross_filter": self._format_cross_filter(cross_filter)
-                        })
-                
-                return relationships
+
+                table_name_to_id = {}
+                table_id_to_name = {}
+                for result in table_map_results:
+                    name, table_id = result[0], result[1]
+                    if name:
+                        table_name_to_id[name] = table_id
+                        table_id_to_name[table_id] = name
+
+                # Get all column name-to-ID mappings
+                cursor = conn.cursor()
+                column_map_query = "SELECT [ID], [ExplicitName], [TableID] FROM $SYSTEM.TMSCHEMA_COLUMNS"
+                cursor.execute(column_map_query)
+                column_map_results = cursor.fetchall()
+                cursor.close()
+
+                column_id_to_info = {}
+                for result in column_map_results:
+                    col_id, col_name, table_id = result[0], result[1], result[2]
+                    if col_id and col_name:
+                        column_id_to_info[col_id] = {"name": col_name, "table_id": table_id}
+
+                # Get all relationships in one query
+                cursor = conn.cursor()
+                relationships_query = """
+                SELECT
+                    [FromTableID], [ToTableID], [FromColumnID], [ToColumnID],
+                    [IsActive], [Type], [CrossFilteringBehavior],
+                    [FromCardinality], [ToCardinality]
+                FROM $SYSTEM.TMSCHEMA_RELATIONSHIPS
+                """
+                cursor.execute(relationships_query)
+                all_relationships = cursor.fetchall()
+                cursor.close()
+
+                # Build relationships mapping for requested tables
+                table_relationships = {name: [] for name in table_names}
+
+                for rel in all_relationships:
+                    from_table_id, to_table_id = rel[0], rel[1]
+                    from_col_id, to_col_id = rel[2], rel[3]
+                    is_active, cross_filter = rel[4], rel[6]  # Skip rel[5] (Type) as it's not used
+                    from_cardinality, to_cardinality = rel[7], rel[8]
+
+                    from_table_name = table_id_to_name.get(from_table_id)
+                    to_table_name = table_id_to_name.get(to_table_id)
+
+                    if not from_table_name or not to_table_name:
+                        continue
+
+                    from_col_info = column_id_to_info.get(from_col_id)
+                    to_col_info = column_id_to_info.get(to_col_id)
+
+                    if not from_col_info or not to_col_info:
+                        continue
+
+                    from_col_name = from_col_info["name"]
+                    to_col_name = to_col_info["name"]
+
+                    # Add relationship from the "Many" side (from_table)
+                    if from_table_name in table_relationships:
+                        table_relationships[from_table_name].append(
+                            {
+                                "relatedTable": to_table_name,
+                                "fromColumn": from_col_name,
+                                "toColumn": to_col_name,
+                                "cardinality": self.connector._format_cardinality(from_cardinality, to_cardinality),
+                                "isActive": bool(is_active),
+                                "crossFilterDirection": self.connector._format_cross_filter(cross_filter),
+                                "relationshipType": "Many-to-One",
+                            }
+                        )
+
+                    # Add relationship from the "One" side (to_table)
+                    if to_table_name in table_relationships:
+                        table_relationships[to_table_name].append(
+                            {
+                                "relatedTable": from_table_name,
+                                "fromColumn": to_col_name,  # Current table column
+                                "toColumn": from_col_name,  # Related table column
+                                "cardinality": self.connector._format_cardinality(to_cardinality, from_cardinality),
+                                "isActive": bool(is_active),
+                                "crossFilterDirection": self.connector._format_cross_filter(cross_filter),
+                                "relationshipType": "One-to-Many",
+                            }
+                        )
+
+                return table_relationships
 
         except Exception as e:
-            logger.warning(f"Failed to get relationships in batch: {str(e)}")
-            return {}
+            logger.warning(f"Failed to get batch relationships: {str(e)}")
+            # Fallback to individual queries if batch fails
+            table_relationships = {name: [] for name in table_names}
+            for table_name in table_names:
+                try:
+                    table_relationships[table_name] = self.get_table_relationships(table_name)
+                except Exception:
+                    table_relationships[table_name] = []
+            return table_relationships
 
     def _format_cardinality(self, from_cardinality: int, to_cardinality: int) -> str:
         """Format cardinality for display"""

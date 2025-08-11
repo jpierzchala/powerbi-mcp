@@ -8,16 +8,17 @@ from utils.dax_utils import clean_dax_query
 
 logger = logging.getLogger(__name__)
 
-# Import variables that will be set by server module
-Pyadomd = None
-
-try:
-    import server
-    if hasattr(server, "Pyadomd"):
-        Pyadomd = server.Pyadomd
-except ImportError:
-    # server module not available yet (during initial import), use local variables
-    pass
+# Always get variables from server module for test compatibility
+def _get_adomd_objects():
+    """Get ADOMD objects from server module for test compatibility."""
+    try:
+        import server
+        return server.Pyadomd
+    except ImportError:
+        # Fallback to direct import if server module not available
+        from config.adomd_setup import initialize_adomd
+        _, pyadomd, _, _ = initialize_adomd()
+        return pyadomd
 
 
 class QueryService:
@@ -39,14 +40,7 @@ class QueryService:
         logger.info(f"Executing DAX query: {cleaned_query}")
 
         try:
-            global Pyadomd
-            # Update from server module if available
-            try:
-                import server
-                if hasattr(server, "Pyadomd"):
-                    Pyadomd = server.Pyadomd
-            except ImportError:
-                pass
+            Pyadomd = _get_adomd_objects()
 
             with Pyadomd(self.connector.connection_string) as conn:
                 cursor = conn.cursor()
