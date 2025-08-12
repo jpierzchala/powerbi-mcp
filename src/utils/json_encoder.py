@@ -12,13 +12,13 @@ class PowerBIJSONEncoder(json.JSONEncoder):
     def default(self, obj):
         """
         Convert Power BI data types to JSON-serializable formats.
-        
+
         Handles datetime objects (converts to ISO format), Decimal objects (converts to float),
         and other objects with __dict__ attribute (converts to string representation).
-        
+
         Args:
             obj: The object to be serialized
-            
+
         Returns:
             JSON-serializable representation of the object
         """

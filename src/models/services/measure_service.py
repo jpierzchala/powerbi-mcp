@@ -5,26 +5,29 @@ from typing import Any, Dict
 
 logger = logging.getLogger(__name__)
 
+
 # Always get variables from server module for test compatibility
 def _get_adomd_objects():
     """Get ADOMD objects from server module for test compatibility."""
     try:
         import server
+
         return server.Pyadomd
     except ImportError:
         # Fallback to direct import if server module not available
         from config.adomd_setup import initialize_adomd
+
         _, pyadomd, _, _ = initialize_adomd()
         return pyadomd
 
 
 class MeasureService:
     """Handles measure operations for PowerBI data models."""
-    
+
     def __init__(self, connector):
         """Initialize with a PowerBI connector."""
         self.connector = connector
-        
+
     def get_measures_for_table(self, table_name: str) -> Dict[str, Any]:
         """Get measures for a measure table"""
         if not self.connector.connected:

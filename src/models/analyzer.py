@@ -1,12 +1,15 @@
 """Data analyzer class for OpenAI integration."""
 
 import json
+import logging
 from typing import Any, Dict, List
 
 import openai
 
 from utils.dax_utils import clean_dax_query
 from utils.json_encoder import safe_json_dumps
+
+logger = logging.getLogger(__name__)
 
 
 class DataAnalyzer:

@@ -221,7 +221,9 @@ class PowerBIConnector:
                     }
                 except Exception as e:
                     # This might be a measure table, or there was an error getting column info
-                    logger.warning(f"Failed to get column information for table '{table_name}', treating as measure table: {e}")
+                    logger.warning(
+                        f"Failed to get column information for table '{table_name}', treating as measure table: {e}"
+                    )
                     cursor.close()
                     measure_info = self.get_measures_for_table(table_name)
                     measure_info["description"] = table_description or "No description available"

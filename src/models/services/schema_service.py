@@ -5,26 +5,29 @@ from typing import Any, Dict, List, Optional
 
 logger = logging.getLogger(__name__)
 
+
 # Always get variables from server module for test compatibility
 def _get_adomd_objects():
     """Get ADOMD objects from server module for test compatibility."""
     try:
         import server
+
         return server.Pyadomd, server.AdomdSchemaGuid
     except ImportError:
         # Fallback to direct import if server module not available
         from config.adomd_setup import initialize_adomd
+
         _, pyadomd, _, adomd_schema_guid = initialize_adomd()
         return pyadomd, adomd_schema_guid
 
 
 class SchemaService:
     """Handles schema-related operations for PowerBI data models."""
-    
+
     def __init__(self, connector):
         """Initialize with a PowerBI connector."""
         self.connector = connector
-        
+
     def discover_tables(self) -> List[Dict[str, Any]]:
         """Discover all tables in the Power BI data model"""
         if not self.connector.connected:
@@ -62,17 +65,18 @@ class SchemaService:
 
                 # Get table descriptions in batch for performance
                 # Use connector method if available (for test compatibility)
-                if hasattr(self.connector, '_get_all_table_descriptions'):
+                if hasattr(self.connector, "_get_all_table_descriptions"):
                     table_descriptions = self.connector._get_all_table_descriptions(table_names)
                 else:
                     table_descriptions = self._get_all_table_descriptions(table_names)
 
                 # Get all relationships in batch for performance
                 # Use connector method if available (for test compatibility)
-                if hasattr(self.connector, '_get_all_relationships'):
+                if hasattr(self.connector, "_get_all_relationships"):
                     table_relationships = self.connector._get_all_relationships(table_names)
                 else:
                     from .relationship_service import RelationshipService
+
                     relationship_service = RelationshipService(self.connector)
                     table_relationships = relationship_service.get_all_relationships(table_names)
 
@@ -109,7 +113,7 @@ class SchemaService:
 
                 # First get the table description
                 # Use connector method if available (for test compatibility)
-                if hasattr(self.connector, '_get_table_description_direct'):
+                if hasattr(self.connector, "_get_table_description_direct"):
                     table_description = self.connector._get_table_description_direct(table_name)
                 else:
                     table_description = self._get_table_description_direct(table_name)
@@ -119,21 +123,21 @@ class SchemaService:
                     # Get basic column information
                     column_query = f"EVALUATE TOPN(1, {table_name})"
                     cursor.execute(column_query)
-                    
+
                     # Get column names from cursor description (original behavior)
                     columns = [desc[0] for desc in cursor.description] if cursor.description else []
-                    
+
                     cursor.fetchall()  # consume results
                     cursor.close()
 
                     # Get enhanced column information with descriptions
                     enhanced_columns = []
                     # Use connector method if available (for test compatibility)
-                    if hasattr(self.connector, '_get_column_descriptions'):
+                    if hasattr(self.connector, "_get_column_descriptions"):
                         column_descriptions = self.connector._get_column_descriptions(table_name)
                     else:
                         column_descriptions = self._get_column_descriptions(table_name)
-                    
+
                     for col_name in columns:
                         # Find description for this column
                         col_description = None
@@ -178,13 +182,16 @@ class SchemaService:
                     }
                 except Exception as e:
                     # This might be a measure table, or there was an error getting column info
-                    logger.warning(f"Failed to get column information for table '{table_name}', treating as measure table: {e}")
+                    logger.warning(
+                        f"Failed to get column information for table '{table_name}', treating as measure table: {e}"
+                    )
                     cursor.close()
                     # Use connector method if available (for test compatibility)
-                    if hasattr(self.connector, 'get_measures_for_table'):
+                    if hasattr(self.connector, "get_measures_for_table"):
                         measure_info = self.connector.get_measures_for_table(table_name)
                     else:
                         from .measure_service import MeasureService
+
                         measure_service = MeasureService(self.connector)
                         measure_info = measure_service.get_measures_for_table(table_name)
                     measure_info["description"] = table_description or "No description available"
@@ -201,16 +208,16 @@ class SchemaService:
 
             with Pyadomd(self.connector.connection_string) as conn:
                 cursor = conn.cursor()
-                
+
                 # Query the table schema to get description
                 description_query = f"SELECT [Description] FROM $SYSTEM.TMSCHEMA_TABLES WHERE [Name] = '{table_name}'"
                 cursor.execute(description_query)
                 result = cursor.fetchone()
                 cursor.close()
-                
+
                 if result and result[0]:
                     return result[0]
-                    
+
                 return None
         except Exception as e:
             logger.warning(f"Could not get table description for '{table_name}': {str(e)}")
@@ -294,11 +301,7 @@ class SchemaService:
                     column_name = desc[0] if desc[0] else "Unknown"
                     column_description = desc[1] if len(desc) > 1 and desc[1] else None
                     col_data_type = desc[2] if len(desc) > 2 else None
-                    result.append({
-                        "name": column_name,
-                        "description": column_description,
-                        "data_type": col_data_type
-                    })
+                    result.append({"name": column_name, "description": column_description, "data_type": col_data_type})
 
                 return result
 

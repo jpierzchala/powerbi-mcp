@@ -1,13 +1,13 @@
 """PowerBI Connector - Main interface for PowerBI operations."""
 
 import logging
-from typing import Any, Dict, List
 from concurrent.futures import ThreadPoolExecutor
+from typing import Any, Dict, List
 
-from .services.schema_service import SchemaService
-from .services.relationship_service import RelationshipService
 from .services.measure_service import MeasureService
 from .services.query_service import QueryService
+from .services.relationship_service import RelationshipService
+from .services.schema_service import SchemaService
 
 logger = logging.getLogger(__name__)
 
@@ -17,6 +17,7 @@ AdomdSchemaGuid = None
 
 try:
     import server
+
     if hasattr(server, "Pyadomd"):
         Pyadomd = server.Pyadomd
     if hasattr(server, "AdomdSchemaGuid"):
@@ -37,7 +38,7 @@ class PowerBIConnector:
         self.metadata = {}
         # Thread pool for async operations
         self.executor = ThreadPoolExecutor(max_workers=4)
-        
+
         # Initialize services
         self.schema_service = SchemaService(self)
         self.relationship_service = RelationshipService(self)
@@ -50,6 +51,7 @@ class PowerBIConnector:
         # Update from server module if available
         try:
             import server
+
             if hasattr(server, "Pyadomd"):
                 Pyadomd = server.Pyadomd
         except ImportError:
@@ -77,11 +79,12 @@ class PowerBIConnector:
             # Update from server module if available
             try:
                 import server
+
                 if hasattr(server, "Pyadomd"):
                     Pyadomd = server.Pyadomd
             except ImportError:
                 pass
-            
+
             with Pyadomd(self.connection_string):
                 self.connected = True
                 logger.info(f"Connected to Power BI dataset: {initial_catalog}")

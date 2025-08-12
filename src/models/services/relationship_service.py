@@ -5,26 +5,29 @@ from typing import Any, Dict, List
 
 logger = logging.getLogger(__name__)
 
+
 # Always get variables from server module for test compatibility
 def _get_adomd_objects():
     """Get ADOMD objects from server module for test compatibility."""
     try:
         import server
+
         return server.Pyadomd
     except ImportError:
         # Fallback to direct import if server module not available
         from config.adomd_setup import initialize_adomd
+
         _, pyadomd, _, _ = initialize_adomd()
         return pyadomd
 
 
 class RelationshipService:
     """Handles relationship operations for PowerBI data models."""
-    
+
     def __init__(self, connector):
         """Initialize with a PowerBI connector."""
         self.connector = connector
-        
+
     def get_table_relationships(self, table_name: str) -> List[Dict[str, Any]]:
         """Get relationships for a specific table"""
         if not self.connector.connected:
@@ -36,12 +39,12 @@ class RelationshipService:
 
             with Pyadomd(self.connector.connection_string) as conn:
                 cursor = conn.cursor()
-                
+
                 # Query to get relationships where this table is involved
                 relationship_query = f"""
-                SELECT 
+                SELECT
                     ft.[Name] as FromTable,
-                    fc.[Name] as FromColumn, 
+                    fc.[Name] as FromColumn,
                     tt.[Name] as ToTable,
                     tc.[Name] as ToColumn,
                     r.[FromCardinality],
@@ -50,15 +53,15 @@ class RelationshipService:
                 FROM $SYSTEM.TMSCHEMA_RELATIONSHIPS r
                 JOIN $SYSTEM.TMSCHEMA_COLUMNS fc ON r.[FromColumnID] = fc.[ID]
                 JOIN $SYSTEM.TMSCHEMA_TABLES ft ON fc.[TableID] = ft.[ID]
-                JOIN $SYSTEM.TMSCHEMA_COLUMNS tc ON r.[ToColumnID] = tc.[ID] 
+                JOIN $SYSTEM.TMSCHEMA_COLUMNS tc ON r.[ToColumnID] = tc.[ID]
                 JOIN $SYSTEM.TMSCHEMA_TABLES tt ON tc.[TableID] = tt.[ID]
                 WHERE ft.[Name] = '{table_name}' OR tt.[Name] = '{table_name}'
                 """
-                
+
                 cursor.execute(relationship_query)
                 results = cursor.fetchall()
                 cursor.close()
-                
+
                 relationships = []
                 for result in results:
                     from_table = result[0]
@@ -68,7 +71,7 @@ class RelationshipService:
                     from_cardinality = result[4]
                     to_cardinality = result[5]
                     cross_filter = result[6]
-                    
+
                     # Determine direction from perspective of current table
                     if from_table == table_name:
                         direction = "outgoing"
@@ -80,18 +83,20 @@ class RelationshipService:
                         related_table = from_table
                         local_column = to_column
                         related_column = from_column
-                    
-                    relationships.append({
-                        "direction": direction,
-                        "related_table": related_table,
-                        "local_column": local_column,
-                        "related_column": related_column,
-                        "cardinality": self._format_cardinality(from_cardinality, to_cardinality),
-                        "cross_filter": self._format_cross_filter(cross_filter)
-                    })
-                
+
+                    relationships.append(
+                        {
+                            "direction": direction,
+                            "related_table": related_table,
+                            "local_column": local_column,
+                            "related_column": related_column,
+                            "cardinality": self._format_cardinality(from_cardinality, to_cardinality),
+                            "cross_filter": self._format_cross_filter(cross_filter),
+                        }
+                    )
+
                 return relationships
-                
+
         except Exception as e:
             logger.error(f"Failed to get relationships for table '{table_name}': {str(e)}")
             return []
