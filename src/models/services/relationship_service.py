@@ -41,6 +41,8 @@ class RelationshipService:
                 cursor = conn.cursor()
 
                 # Query to get relationships where this table is involved
+                # Quote table name in WHERE clause to handle special names
+                safe_table = table_name.replace("'", "''")
                 relationship_query = f"""
                 SELECT
                     ft.[Name] as FromTable,
@@ -55,7 +57,7 @@ class RelationshipService:
                 JOIN $SYSTEM.TMSCHEMA_TABLES ft ON fc.[TableID] = ft.[ID]
                 JOIN $SYSTEM.TMSCHEMA_COLUMNS tc ON r.[ToColumnID] = tc.[ID]
                 JOIN $SYSTEM.TMSCHEMA_TABLES tt ON tc.[TableID] = tt.[ID]
-                WHERE ft.[Name] = '{table_name}' OR tt.[Name] = '{table_name}'
+                WHERE ft.[Name] = '{safe_table}' OR tt.[Name] = '{safe_table}'
                 """
 
                 cursor.execute(relationship_query)

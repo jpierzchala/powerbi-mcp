@@ -80,5 +80,6 @@ class QueryService:
 
     def get_sample_data(self, table_name: str, num_rows: int = 10) -> List[Dict[str, Any]]:
         """Get sample data from a table"""
-        dax_query = f"EVALUATE TOPN({num_rows}, {table_name})"
+        safe_table = table_name.replace("'", "''")
+        dax_query = f"EVALUATE TOPN({num_rows}, '{safe_table}')"
         return self.execute_dax_query(dax_query)
