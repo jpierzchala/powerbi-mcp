@@ -56,6 +56,8 @@ class TestPowerBIIntegration:
             "TEST_CLIENT_ID",
             "TEST_CLIENT_SECRET",
             "TEST_INITIAL_CATALOG",
+            # Optional second catalog for A/B parallel tests
+            # "TEST_INITIAL_CATALOG_A", "TEST_INITIAL_CATALOG_B" can be provided
         ]
 
         config = {}
@@ -491,9 +493,8 @@ class TestMCPServerIntegration:
         return PowerBIMCPServer(host="localhost", port=8001)
 
     @pytest.mark.asyncio
-    async def test_connect_powerbi_tool(self, mcp_server, test_config):
-        """Test the connect_powerbi tool through MCP interface."""
-        # Prepare connection arguments
+    async def test_connect_powerbi_tool_removed(self, mcp_server, test_config):
+        """Ensure legacy connect tool is removed and returns guidance."""
         arguments = {
             "xmla_endpoint": test_config["TEST_XMLA_ENDPOINT"],
             "tenant_id": test_config["TEST_TENANT_ID"],
@@ -501,18 +502,13 @@ class TestMCPServerIntegration:
             "client_secret": test_config["TEST_CLIENT_SECRET"],
             "initial_catalog": test_config["TEST_INITIAL_CATALOG"],
         }
-
-        # Test connection
         result = await mcp_server._handle_connect(arguments)
-
-        assert isinstance(result, str), "Connection result should be a string"
-        assert "Successfully connected" in result, f"Connection should succeed: {result}"
-        assert mcp_server.is_connected, "Server should be in connected state"
+        assert "removed" in result.lower()
 
     @pytest.mark.asyncio
     async def test_list_tables_tool(self, mcp_server, test_config):
         """Test the list_tables tool through MCP interface."""
-        # First connect
+        # Test listing tables stateless
         arguments = {
             "xmla_endpoint": test_config["TEST_XMLA_ENDPOINT"],
             "tenant_id": test_config["TEST_TENANT_ID"],
@@ -520,10 +516,7 @@ class TestMCPServerIntegration:
             "client_secret": test_config["TEST_CLIENT_SECRET"],
             "initial_catalog": test_config["TEST_INITIAL_CATALOG"],
         }
-        await mcp_server._handle_connect(arguments)
-
-        # Test listing tables
-        result = await mcp_server._handle_list_tables()
+        result = await mcp_server._handle_list_tables(arguments)
 
         assert isinstance(result, str), "Tables list result should be a string"
         assert (
@@ -537,7 +530,7 @@ class TestMCPServerIntegration:
     @pytest.mark.asyncio
     async def test_get_table_info_tool(self, mcp_server, test_config):
         """Test the get_table_info tool through MCP interface."""
-        # First connect
+        # Get first available table using stateless list
         arguments = {
             "xmla_endpoint": test_config["TEST_XMLA_ENDPOINT"],
             "tenant_id": test_config["TEST_TENANT_ID"],
@@ -545,10 +538,7 @@ class TestMCPServerIntegration:
             "client_secret": test_config["TEST_CLIENT_SECRET"],
             "initial_catalog": test_config["TEST_INITIAL_CATALOG"],
         }
-        await mcp_server._handle_connect(arguments)
-
-        # Get first available table
-        tables_result = await mcp_server._handle_list_tables()
+        tables_result = await mcp_server._handle_list_tables(arguments)
         assert "No tables found" not in tables_result, "Test dataset should have tables available"
 
         # Extract first table name (parse new format: "📊 **Table Name**")
@@ -567,7 +557,14 @@ class TestMCPServerIntegration:
         assert len(table_name.strip()) > 0, f"Extracted table name is empty. Raw output:\n{tables_result}"
 
         # Test getting table info
-        arguments = {"table_name": table_name}
+        arguments = {
+            "table_name": table_name,
+            "xmla_endpoint": test_config["TEST_XMLA_ENDPOINT"],
+            "tenant_id": test_config["TEST_TENANT_ID"],
+            "client_id": test_config["TEST_CLIENT_ID"],
+            "client_secret": test_config["TEST_CLIENT_SECRET"],
+            "initial_catalog": test_config["TEST_INITIAL_CATALOG"],
+        }
         result = await mcp_server._handle_get_table_info(arguments)
 
         assert isinstance(result, str), "Table info result should be a string"
@@ -576,16 +573,6 @@ class TestMCPServerIntegration:
     @pytest.mark.asyncio
     async def test_execute_dax_tool(self, mcp_server, test_config):
         """Test the execute_dax tool through MCP interface."""
-        # First connect
-        arguments = {
-            "xmla_endpoint": test_config["TEST_XMLA_ENDPOINT"],
-            "tenant_id": test_config["TEST_TENANT_ID"],
-            "client_id": test_config["TEST_CLIENT_ID"],
-            "client_secret": test_config["TEST_CLIENT_SECRET"],
-            "initial_catalog": test_config["TEST_INITIAL_CATALOG"],
-        }
-        await mcp_server._handle_connect(arguments)
-
         # Test simple DAX query
         if test_config.get("TEST_DAX_QUERY"):
             dax_query = test_config["TEST_DAX_QUERY"]
@@ -593,7 +580,14 @@ class TestMCPServerIntegration:
             # Use a generic query that should work
             dax_query = 'EVALUATE ROW("Test", 1)'
 
-        arguments = {"dax_query": dax_query}
+        arguments = {
+            "dax_query": dax_query,
+            "xmla_endpoint": test_config["TEST_XMLA_ENDPOINT"],
+            "tenant_id": test_config["TEST_TENANT_ID"],
+            "client_id": test_config["TEST_CLIENT_ID"],
+            "client_secret": test_config["TEST_CLIENT_SECRET"],
+            "initial_catalog": test_config["TEST_INITIAL_CATALOG"],
+        }
         result = await mcp_server._handle_execute_dax(arguments)
 
         assert isinstance(result, str), "DAX execution result should be a string"
@@ -601,6 +595,39 @@ class TestMCPServerIntegration:
         assert (
             result.startswith("[") or result.startswith("{") or "error" in result.lower() or "failed" in result.lower()
         ), f"Result should be JSON data or error message: {result}"
+
+    @pytest.mark.asyncio
+    async def test_parallel_two_models_stateless(self, mcp_server, test_config):
+        """Run list_tables for two different models without interference using stateless calls."""
+        cat_a = os.getenv("TEST_INITIAL_CATALOG_A") or test_config["TEST_INITIAL_CATALOG"]
+        cat_b = os.getenv("TEST_INITIAL_CATALOG_B") or test_config["TEST_INITIAL_CATALOG"]
+
+        args_a = {
+            "xmla_endpoint": test_config["TEST_XMLA_ENDPOINT"],
+            "tenant_id": test_config["TEST_TENANT_ID"],
+            "client_id": test_config["TEST_CLIENT_ID"],
+            "client_secret": test_config["TEST_CLIENT_SECRET"],
+            "initial_catalog": cat_a,
+        }
+        args_b = {
+            "xmla_endpoint": test_config["TEST_XMLA_ENDPOINT"],
+            "tenant_id": test_config["TEST_TENANT_ID"],
+            "client_id": test_config["TEST_CLIENT_ID"],
+            "client_secret": test_config["TEST_CLIENT_SECRET"],
+            "initial_catalog": cat_b,
+        }
+
+        res_a, res_b = await asyncio.gather(
+            mcp_server._handle_list_tables(args_a), mcp_server._handle_list_tables(args_b)
+        )
+
+        assert isinstance(res_a, str) and isinstance(res_b, str)
+        assert (
+            "Available tables" in res_a or "No tables" in res_a
+        ), f"Unexpected response A: {res_a[:200]}"
+        assert (
+            "Available tables" in res_b or "No tables" in res_b
+        ), f"Unexpected response B: {res_b[:200]}"
 
 
 if __name__ == "__main__":

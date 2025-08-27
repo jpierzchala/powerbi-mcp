@@ -3,6 +3,7 @@
 import asyncio
 import os
 import threading
+from datetime import datetime
 from typing import Any, Dict, List, Optional
 
 from mcp.types import TextContent
@@ -21,56 +22,16 @@ class PowerBIHandlers:
         self.analyzer = None
         self.is_connected = False
         self.connection_lock = threading.Lock()
+        # Per-request connector pool (keyed by endpoint/catalog/tenant/client)
+        self.pool_lock = threading.Lock()
+        self.connector_pool: Dict[str, Dict[str, Any]] = {}
+        self.connection_ttl_seconds = int(os.getenv("CONNECTION_TTL_SECONDS", "300"))
 
     def _openai_enabled(self) -> bool:
         """Return True if OpenAI features are enabled"""
         return bool(os.getenv("OPENAI_API_KEY"))
 
-    async def handle_connect(self, arguments: Dict[str, Any]) -> str:
-        """Handle connection to Power BI"""
-        try:
-            with self.connection_lock:
-                # Connect to Power BI
-                tenant_id = arguments.get("tenant_id") or os.getenv("DEFAULT_TENANT_ID")
-                client_id = arguments.get("client_id") or os.getenv("DEFAULT_CLIENT_ID")
-                client_secret = arguments.get("client_secret") or os.getenv("DEFAULT_CLIENT_SECRET")
-
-                if not all([tenant_id, client_id, client_secret]):
-                    return (
-                        "Missing credentials. Provide tenant_id, client_id, and client_secret "
-                        "either in the action arguments or via DEFAULT_* values in the .env file."
-                    )
-
-                await asyncio.get_event_loop().run_in_executor(
-                    None,
-                    self.connector.connect,
-                    arguments["xmla_endpoint"],
-                    tenant_id,
-                    client_id,
-                    client_secret,
-                    arguments["initial_catalog"],
-                )
-
-                # Initialize the analyzer with OpenAI API key
-                api_key = os.getenv("OPENAI_API_KEY")
-                if not api_key:
-                    logger.warning("OpenAI API key not provided - natural language features disabled")
-                    self.analyzer = None
-                else:
-                    self.analyzer = DataAnalyzer(api_key)
-
-                self.is_connected = True
-
-                # Discover tables in background only if analyzer is available
-                if self.analyzer:
-                    asyncio.create_task(self._async_prepare_context())
-
-                return f"Successfully connected to Power BI dataset '{arguments['initial_catalog']}'. Discovering tables..."
-
-        except Exception as e:
-            self.is_connected = False
-            logger.error(f"Connection failed: {str(e)}")
-            return f"Connection failed: {str(e)}"
+    # Note: Legacy explicit connect method removed from public tool flow. We keep analyzer prep helper below.
 
     async def _async_prepare_context(self):
         """Prepare data context asynchronously"""
@@ -107,13 +68,108 @@ class PowerBIHandlers:
         except Exception as e:
             logger.error(f"Failed to prepare context: {e}")
 
-    async def handle_list_tables(self) -> str:
-        """List all available tables with descriptions and relationships"""
-        if not self.is_connected:
-            return "Not connected to Power BI. Please connect first using 'connect_powerbi'."
+    def _extract_connection_params(self, arguments: Dict[str, Any]):
+        """Extract connection parameters with support for common Power BI aliases.
 
+        Supported aliases:
+        - xmla_endpoint: server, data_source, workspace_connection
+        - initial_catalog: database, catalog, dataset, model
+        Credentials fall back to DEFAULT_* env vars if not provided.
+        """
+        # Endpoint aliases
+        xmla_endpoint = (
+            arguments.get("xmla_endpoint")
+            or arguments.get("server")
+            or arguments.get("data_source")
+            or arguments.get("workspace_connection")
+            or os.getenv("DEFAULT_XMLA_ENDPOINT")
+        )
+        # Catalog/dataset aliases
+        initial_catalog = (
+            arguments.get("initial_catalog")
+            or arguments.get("database")
+            or arguments.get("catalog")
+            or arguments.get("dataset")
+            or arguments.get("model")
+            or os.getenv("DEFAULT_INITIAL_CATALOG")
+        )
+        tenant_id = arguments.get("tenant_id") or os.getenv("DEFAULT_TENANT_ID")
+        client_id = arguments.get("client_id") or os.getenv("DEFAULT_CLIENT_ID")
+        client_secret = arguments.get("client_secret") or os.getenv("DEFAULT_CLIENT_SECRET")
+        return xmla_endpoint, tenant_id, client_id, client_secret, initial_catalog
+
+    def _make_pool_key(
+        self,
+        xmla_endpoint: str,
+        initial_catalog: str,
+        tenant_id: Optional[str],
+        client_id: Optional[str],
+    ) -> str:
+        return f"{xmla_endpoint}|{initial_catalog}|{tenant_id or ''}|{client_id or ''}"
+
+    def _cleanup_pool_locked(self, now: Optional[datetime] = None) -> None:
+        now = now or datetime.utcnow()
+        to_delete = []
+        for key, entry in self.connector_pool.items():
+            last_used = entry.get("last_used")
+            if last_used and (now - last_used).total_seconds() > self.connection_ttl_seconds:
+                to_delete.append(key)
+        for key in to_delete:
+            try:
+                del self.connector_pool[key]
+            except Exception:
+                pass
+
+    async def _get_or_create_connected_connector(self, arguments: Dict[str, Any]) -> PowerBIConnector:
+        xmla_endpoint, tenant_id, client_id, client_secret, initial_catalog = self._extract_connection_params(arguments)
+        if not xmla_endpoint or not initial_catalog:
+            raise ValueError(
+                "Missing required connection parameters: provide xmla_endpoint/server and initial_catalog/database/dataset."
+            )
+
+        key = self._make_pool_key(xmla_endpoint, initial_catalog, tenant_id, client_id)
+        now = datetime.utcnow()
+
+        # Try to reuse from pool
+        with self.pool_lock:
+            self._cleanup_pool_locked(now)
+            entry = self.connector_pool.get(key)
+            if entry:
+                entry["last_used"] = now
+                connector: PowerBIConnector = entry["connector"]
+            else:
+                connector = None  # type: ignore
+
+        if connector is None:
+            connector = PowerBIConnector()
+            loop = asyncio.get_event_loop()
+            await loop.run_in_executor(
+                None, connector.connect, xmla_endpoint, tenant_id, client_id, client_secret, initial_catalog
+            )
+            with self.pool_lock:
+                self.connector_pool[key] = {"connector": connector, "last_used": datetime.utcnow()}
+        elif not connector.connected:
+            loop = asyncio.get_event_loop()
+            await loop.run_in_executor(
+                None, connector.connect, xmla_endpoint, tenant_id, client_id, client_secret, initial_catalog
+            )
+            with self.pool_lock:
+                entry = self.connector_pool.get(key)
+                if entry:
+                    entry["last_used"] = datetime.utcnow()
+
+        return connector
+
+    async def handle_list_tables(self, arguments: Optional[Dict[str, Any]] = None) -> str:
+        """List all available tables with descriptions and relationships (stateless)."""
         try:
-            tables = await asyncio.get_event_loop().run_in_executor(None, self.connector.discover_tables)
+            if not arguments:
+                return (
+                    "Please provide connection parameters: xmla_endpoint/server and initial_catalog/database/dataset."
+                )
+
+            connector = await self._get_or_create_connected_connector(arguments)
+            tables = await asyncio.get_event_loop().run_in_executor(None, connector.discover_tables)
 
             if not tables:
                 return "No tables found in the dataset."
@@ -142,16 +198,14 @@ class PowerBIHandlers:
             return f"Error listing tables: {str(e)}"
 
     async def handle_get_table_info(self, arguments: Dict[str, Any]) -> str:
-        """Get information about a specific table"""
-        if not self.is_connected:
-            return "Not connected to Power BI. Please connect first."
-
+        """Get information about a specific table (stateless)."""
         table_name = arguments.get("table_name")
         if not table_name:
             return "Please provide a table name."
 
         try:
-            schema = await asyncio.get_event_loop().run_in_executor(None, self.connector.get_table_schema, table_name)
+            connector = await self._get_or_create_connected_connector(arguments)
+            schema = await asyncio.get_event_loop().run_in_executor(None, connector.get_table_schema, table_name)
 
             if schema["type"] == "data_table":
                 sample_data = await asyncio.get_event_loop().run_in_executor(
@@ -225,16 +279,14 @@ class PowerBIHandlers:
             return f"Error processing query: {str(e)}"
 
     async def handle_execute_dax(self, arguments: Dict[str, Any]) -> str:
-        """Execute a custom DAX query"""
-        if not self.is_connected:
-            return "Not connected to Power BI. Please connect first."
-
+        """Execute a custom DAX query (stateless)."""
         dax_query = arguments.get("dax_query")
         if not dax_query:
             return "Please provide a DAX query."
 
         try:
-            results = await asyncio.get_event_loop().run_in_executor(None, self.connector.execute_dax_query, dax_query)
+            connector = await self._get_or_create_connected_connector(arguments)
+            results = await asyncio.get_event_loop().run_in_executor(None, connector.execute_dax_query, dax_query)
             return safe_json_dumps(results, indent=2)
         except Exception as e:
             logger.error(f"DAX execution error: {e}")
@@ -265,19 +317,17 @@ class PowerBIHandlers:
         try:
             logger.info(f"Handling tool call: {name}")
 
-            if name == "connect_powerbi":
-                result = await self.handle_connect(arguments)
-            elif name == "list_tables":
-                result = await self.handle_list_tables()
+            if name == "list_tables":
+                result = await self.handle_list_tables(arguments or {})
             elif name == "get_table_info":
-                result = await self.handle_get_table_info(arguments)
+                result = await self.handle_get_table_info(arguments or {})
             elif name == "query_data":
                 if not self._openai_enabled():
                     result = "OpenAI API key not configured."
                 else:
-                    result = await self.handle_query_data(arguments)
+                    result = await self.handle_query_data(arguments or {})
             elif name == "execute_dax":
-                result = await self.handle_execute_dax(arguments)
+                result = await self.handle_execute_dax(arguments or {})
             elif name == "suggest_questions":
                 if not self._openai_enabled():
                     result = "OpenAI API key not configured."

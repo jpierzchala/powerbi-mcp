@@ -29,23 +29,8 @@ class TestPyadomdOptional:
 
 @pytest.mark.unit
 @pytest.mark.asyncio
-async def test_connect_without_openai(monkeypatch):
+async def test_connect_removed_returns_message(monkeypatch):
     server = PowerBIMCPServer()
-
-    # Patch connector.connect to avoid real connection
-    def fake_connect(xmla, tenant, client, secret, catalog):
-        return True
-
-    monkeypatch.setattr(server.connector, "connect", fake_connect)
-
-    # Track if context preparation was called
-    called = False
-
-    async def fake_prepare():
-        nonlocal called
-        called = True
-
-    monkeypatch.setattr(server, "_async_prepare_context", fake_prepare)
 
     # Ensure OPENAI_API_KEY is not set
     monkeypatch.delenv("OPENAI_API_KEY", raising=False)
@@ -60,10 +45,7 @@ async def test_connect_without_openai(monkeypatch):
         }
     )
 
-    assert "Successfully connected" in result
-    assert server.is_connected is True
-    assert server.analyzer is None
-    assert called is False
+    assert "removed" in result.lower()
 
 
 @pytest.mark.unit

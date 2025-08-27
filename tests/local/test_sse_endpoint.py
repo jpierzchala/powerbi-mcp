@@ -87,7 +87,9 @@ async def test_sse_list_tools():
                 result = await session.list_tools()
                 tool_names = [t.name for t in result.tools]
                 print(f"Test completed successfully! ({time.time() - start_time:.2f}s)")
-                assert "connect_powerbi" in tool_names
+                # Legacy connect tool has been removed; ensure new tools exist
+                assert "list_tables" in tool_names
+                assert "execute_dax" in tool_names
     finally:
         print(f"Terminating server... ({time.time() - start_time:.2f}s)")
         proc.terminate()
