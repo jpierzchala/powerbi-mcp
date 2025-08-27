@@ -198,18 +198,36 @@ class PowerBIHandlers:
             return f"Error listing tables: {str(e)}"
 
     async def handle_get_table_info(self, arguments: Dict[str, Any]) -> str:
-        """Get information about a specific table (stateless)."""
+        """Get information about a specific table (stateless).
+
+        For unit tests or injected connectors, if no connection parameters are provided
+        and no defaults exist in environment, falls back to using self.connector.
+        """
         table_name = arguments.get("table_name")
         if not table_name:
             return "Please provide a table name."
 
         try:
-            connector = await self._get_or_create_connected_connector(arguments)
+            # Determine whether we have enough connection params; otherwise use injected connector
+            has_endpoint = any(
+                arguments.get(k)
+                for k in ("xmla_endpoint", "server", "data_source", "workspace_connection")
+            ) or bool(os.getenv("DEFAULT_XMLA_ENDPOINT"))
+            has_catalog = any(
+                arguments.get(k)
+                for k in ("initial_catalog", "database", "catalog", "dataset", "model")
+            ) or bool(os.getenv("DEFAULT_INITIAL_CATALOG"))
+
+            if has_endpoint and has_catalog:
+                connector = await self._get_or_create_connected_connector(arguments)
+            else:
+                connector = self.connector
+
             schema = await asyncio.get_event_loop().run_in_executor(None, connector.get_table_schema, table_name)
 
             if schema["type"] == "data_table":
                 sample_data = await asyncio.get_event_loop().run_in_executor(
-                    None, self.connector.get_sample_data, table_name, 5
+                    None, connector.get_sample_data, table_name, 5
                 )
                 # Extract column names from enhanced column objects
                 column_names = [col["name"] for col in schema["columns"]]
