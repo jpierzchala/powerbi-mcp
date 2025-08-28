@@ -2,8 +2,8 @@
 
 import logging
 import threading
-from datetime import datetime
 from concurrent.futures import ThreadPoolExecutor
+from datetime import datetime
 from typing import Any, Dict, List, Optional
 
 from .services.measure_service import MeasureService
@@ -143,7 +143,9 @@ class PowerBIConnector:
         tables = self.schema_service.discover_tables()
 
         with self._cache_lock:
-            model_entry = self._model_cache.setdefault(cache_key, {"version": None, "tables": None, "table_schemas": {}})
+            model_entry = self._model_cache.setdefault(
+                cache_key, {"version": None, "tables": None, "table_schemas": {}}
+            )
             model_entry["tables"] = tables
             # Store the marker we observed now; if None, we keep None to allow future invalidations when marker becomes available
             model_entry["version"] = current_marker
@@ -173,7 +175,9 @@ class PowerBIConnector:
         schema = self.schema_service.get_table_schema(table_name)
 
         with self._cache_lock:
-            model_entry = self._model_cache.setdefault(cache_key, {"version": None, "tables": None, "table_schemas": {}})
+            model_entry = self._model_cache.setdefault(
+                cache_key, {"version": None, "tables": None, "table_schemas": {}}
+            )
             table_schemas = model_entry.setdefault("table_schemas", {})
             table_schemas[table_name] = {"data": schema, "version": current_marker}
             # Also consider updating model-level version if it's currently None

@@ -141,5 +141,3 @@ class TestPerModelCaching:
         setattr(connector, "_get_model_last_update_marker", lambda: t2)
         schema_x_after_update = connector.get_table_schema("TableX")
         assert schema_x_after_update["description"] == "descX-NEW-SHOULD-NOT-APPEAR"
-
-

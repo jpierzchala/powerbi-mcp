@@ -31,7 +31,8 @@ if integration_enabled:
 
 @pytest.mark.integration
 @pytest.mark.skipif(
-    not integration_enabled, reason="Integration tests disabled. Set ENABLE_INTEGRATION_TESTS=true to enable.",
+    not integration_enabled,
+    reason="Integration tests disabled. Set ENABLE_INTEGRATION_TESTS=true to enable.",
 )
 class TestPerModelCachingIntegration:
     @pytest.fixture(scope="class")
@@ -105,5 +106,3 @@ class TestPerModelCachingIntegration:
         tables_b_again = connector.discover_tables()
         names_b_again = self._table_names(tables_b_again)
         assert set(names_b_again) == set(names_b_first)
-
-
