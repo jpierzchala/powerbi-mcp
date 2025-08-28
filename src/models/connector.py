@@ -285,8 +285,7 @@ class PowerBIConnector:
                         last_schema = row[0] if len(row) > 0 else None
                         last_data = row[1] if len(row) > 1 else None
                         # Determine max for this row
-                        candidates = [d for d in (last_schema, last_data) if hasattr(d, "__class__")]
-                        for d in candidates:
+                        for d in (last_schema, last_data):
                             if isinstance(d, datetime):
                                 if last_seen is None or d > last_seen:
                                     last_seen = d

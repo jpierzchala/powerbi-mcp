@@ -91,7 +91,8 @@ class TestPerModelCachingIntegration:
         # Sanity: datasets should differ in at least one table name
         # (If they don't, the test environment provides identical models and this check is skipped)
         if set(names_a_first) != set(names_b_first):
-            assert set(names_a_first) != set(names_b_first)
+            # Redundant assert removed per review; condition above is sufficient for documentation.
+            pass
 
         # Switch back to A - should return same names as names_a_first (cached per model)
         self._connect(connector, test_config, test_config["TEST_INITIAL_CATALOG_A"])

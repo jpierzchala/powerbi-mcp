@@ -220,9 +220,9 @@ class SchemaService:
                 results = cursor.fetchall()
                 cursor.close()
 
-                if results and len(results) > 0:
+                if results:
                     first = results[0]
-                    if first and len(first) > 0 and first[0]:
+                    if first and first[0]:
                         return str(first[0])
 
                 return None
