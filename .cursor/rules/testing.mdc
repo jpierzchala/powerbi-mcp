@@ -1,0 +1,11 @@
+---
+description: Enforce test writing when implementing new features or edits.
+globs:
+  - "**/*"
+alwaysApply: true
+---
+
+- When you add new functionality or change behavior, add or update unit/integration tests accordingly.
+- Prefer fast unit tests for logic and edge cases; complement with targeted integration tests if features touch external systems.
+- After adding tests, run only the impacted scope first (e.g., `pytest -q tests/unit`) before running the full suite.
+- Ensure CI passes with a full test run before committing large refactors.

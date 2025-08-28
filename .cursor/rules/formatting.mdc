@@ -1,0 +1,15 @@
+---
+description: Enforce local formatting checks to match CI (Black + isort).
+globs:
+  - "**/*"
+alwaysApply: true
+---
+
+- Before committing or pushing, run:
+  - `python -m black src/ tests/ --line-length=120`
+  - `isort src/ tests/ --profile=black`
+- For quick validation (CI-style), run:
+  - `python -m black --check --diff src/ tests/ --line-length=120`
+  - `isort --check-only --diff src/ tests/ --profile=black`
+- Keep imports sorted and lines wrapped per Black (120 chars) and isort profile=black.
+

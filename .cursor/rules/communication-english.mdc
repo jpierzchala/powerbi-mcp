@@ -1,0 +1,13 @@
+---
+description: Enforce English language for all PR artifacts and collaboration.
+globs:
+  - "**/*"
+alwaysApply: true
+---
+
+- All pull request titles, descriptions, commit messages, review comments, and issue discussions MUST be in English.
+- When generating summaries or PR bodies, prefer concise, action-oriented English.
+- If input is in another language, translate to English before posting externally (keep technical terms intact).
+- Use American English spelling (e.g., "behavior", "color").
+- Keep headings and bullet points scannable; avoid overly long paragraphs.
+

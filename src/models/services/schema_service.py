@@ -121,7 +121,9 @@ class SchemaService:
                 # Try to get column information
                 try:
                     # Get basic column information
-                    column_query = f"EVALUATE TOPN(1, {table_name})"
+                    # Quote table names to handle spaces/special chars in DAX identifiers
+                    safe_table = table_name.replace("'", "''")
+                    column_query = f"EVALUATE TOPN(1, '{safe_table}')"
                     cursor.execute(column_query)
 
                     # Get column names from cursor description (original behavior)
@@ -210,13 +212,16 @@ class SchemaService:
                 cursor = conn.cursor()
 
                 # Query the table schema to get description
-                description_query = f"SELECT [Description] FROM $SYSTEM.TMSCHEMA_TABLES WHERE [Name] = '{table_name}'"
+                safe_table = table_name.replace("'", "''")
+                description_query = f"SELECT [Description] FROM $SYSTEM.TMSCHEMA_TABLES WHERE [Name] = '{safe_table}'"
                 cursor.execute(description_query)
-                result = cursor.fetchone()
+                results = cursor.fetchall()
                 cursor.close()
 
-                if result and result[0]:
-                    return result[0]
+                if results:
+                    first = results[0]
+                    if first and first[0]:
+                        return str(first[0])
 
                 return None
         except Exception as e:
