@@ -1,0 +1,13 @@
+---
+description: Enforce English language for PRs, reviews, and repository communication.
+globs:
+  - "**/*"
+alwaysApply: true
+---
+
+- All pull requests (titles, descriptions), commit messages, code comments, and review discussions must be written in English (prefer US English).
+- Before creating or editing a PR, ensure any auto-generated content is translated/edited to English.
+- Use clear, concise language; avoid regionalisms and non-English phrases.
+- PR titles should use imperative mood and follow Conventional Commits when applicable.
+- Summaries should be bullet-pointed, focusing on impact and testing instructions.
+
