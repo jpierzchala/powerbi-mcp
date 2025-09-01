@@ -622,12 +622,8 @@ class TestMCPServerIntegration:
         )
 
         assert isinstance(res_a, str) and isinstance(res_b, str)
-        assert (
-            "Available tables" in res_a or "No tables" in res_a
-        ), f"Unexpected response A: {res_a[:200]}"
-        assert (
-            "Available tables" in res_b or "No tables" in res_b
-        ), f"Unexpected response B: {res_b[:200]}"
+        assert "Available tables" in res_a or "No tables" in res_a, f"Unexpected response A: {res_a[:200]}"
+        assert "Available tables" in res_b or "No tables" in res_b, f"Unexpected response B: {res_b[:200]}"
 
 
 if __name__ == "__main__":

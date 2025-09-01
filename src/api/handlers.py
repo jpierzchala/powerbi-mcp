@@ -118,9 +118,7 @@ class PowerBIHandlers:
             try:
                 del self.connector_pool[key]
             except Exception as e:
-                logger.warning(
-                    f"Failed to delete connector pool entry for key '{key}': {e}", exc_info=True
-                )
+                logger.warning(f"Failed to delete connector pool entry for key '{key}': {e}", exc_info=True)
 
     async def _get_or_create_connected_connector(self, arguments: Dict[str, Any]) -> PowerBIConnector:
         xmla_endpoint, tenant_id, client_id, client_secret, initial_catalog = self._extract_connection_params(arguments)
@@ -212,12 +210,10 @@ class PowerBIHandlers:
         try:
             # Determine whether we have enough connection params; otherwise use injected connector
             has_endpoint = any(
-                arguments.get(k)
-                for k in ("xmla_endpoint", "server", "data_source", "workspace_connection")
+                arguments.get(k) for k in ("xmla_endpoint", "server", "data_source", "workspace_connection")
             ) or bool(os.getenv("DEFAULT_XMLA_ENDPOINT"))
             has_catalog = any(
-                arguments.get(k)
-                for k in ("initial_catalog", "database", "catalog", "dataset", "model")
+                arguments.get(k) for k in ("initial_catalog", "database", "catalog", "dataset", "model")
             ) or bool(os.getenv("DEFAULT_INITIAL_CATALOG"))
 
             if has_endpoint and has_catalog:
