@@ -213,16 +213,14 @@ class SchemaService:
 
                 # Query the table schema to get description
                 safe_table = table_name.replace("'", "''")
-                description_query = (
-                    f"SELECT [Description] FROM $SYSTEM.TMSCHEMA_TABLES WHERE [Name] = '{safe_table}'"
-                )
+                description_query = f"SELECT [Description] FROM $SYSTEM.TMSCHEMA_TABLES WHERE [Name] = '{safe_table}'"
                 cursor.execute(description_query)
                 results = cursor.fetchall()
                 cursor.close()
 
-                if results and len(results) > 0:
+                if results:
                     first = results[0]
-                    if first and len(first) > 0 and first[0]:
+                    if first and first[0]:
                         return str(first[0])
 
                 return None

@@ -11,3 +11,4 @@ alwaysApply: true
 - Use `pytest -q` directly (no piping) to run tests.
 - For background processes, use the job control provided by the environment instead of shell-specific operators.
 - Avoid Unix-only tools (sed/awk/less). Use PowerShell equivalents when necessary.
+

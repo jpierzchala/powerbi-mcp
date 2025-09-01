@@ -109,12 +109,22 @@ jobs:
         TEST_CLIENT_ID: ${{ secrets.TEST_CLIENT_ID }}
         TEST_CLIENT_SECRET: ${{ secrets.TEST_CLIENT_SECRET }}
         TEST_INITIAL_CATALOG: ${{ secrets.TEST_INITIAL_CATALOG }}
+        TEST_INITIAL_CATALOG_A: ${{ secrets.TEST_INITIAL_CATALOG_A }}
+        TEST_INITIAL_CATALOG_B: ${{ secrets.TEST_INITIAL_CATALOG_B }}
+        TEST_EXPECTED_TABLE: ${{ vars.TEST_EXPECTED_TABLE }}
+        TEST_EXPECTED_COLUMN: ${{ vars.TEST_EXPECTED_COLUMN }}
+        TEST_DAX_QUERY: ${{ vars.TEST_DAX_QUERY }}
         OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
       run: |
         echo "Integration tests enabled: ${ENABLE_INTEGRATION_TESTS:-false}"
         if [ "${ENABLE_INTEGRATION_TESTS}" = "true" ]; then
           echo "✅ Integration tests will run"
           echo "Test dataset: ${TEST_INITIAL_CATALOG:-Not configured}"
+          echo "Test dataset A: ${TEST_INITIAL_CATALOG_A:-Not configured}"
+          echo "Test dataset B: ${TEST_INITIAL_CATALOG_B:-Not configured}"
+          echo "Expected table: ${TEST_EXPECTED_TABLE:-Not configured}"
+          echo "Expected column: ${TEST_EXPECTED_COLUMN:-Not configured}"
+          echo "Configured DAX: ${TEST_DAX_QUERY:-Not configured}"
         else
           echo "ℹ️  Integration tests disabled or not configured"
         fi
@@ -128,9 +138,11 @@ jobs:
         TEST_CLIENT_ID: ${{ secrets.TEST_CLIENT_ID }}
         TEST_CLIENT_SECRET: ${{ secrets.TEST_CLIENT_SECRET }}
         TEST_INITIAL_CATALOG: ${{ secrets.TEST_INITIAL_CATALOG }}
-        TEST_EXPECTED_TABLE: ${{ secrets.TEST_EXPECTED_TABLE }}
-        TEST_EXPECTED_COLUMN: ${{ secrets.TEST_EXPECTED_COLUMN }}
-        TEST_DAX_QUERY: ${{ secrets.TEST_DAX_QUERY }}
+        TEST_INITIAL_CATALOG_A: ${{ secrets.TEST_INITIAL_CATALOG_A }}
+        TEST_INITIAL_CATALOG_B: ${{ secrets.TEST_INITIAL_CATALOG_B }}
+        TEST_EXPECTED_TABLE: ${{ vars.TEST_EXPECTED_TABLE }}
+        TEST_EXPECTED_COLUMN: ${{ vars.TEST_EXPECTED_COLUMN }}
+        TEST_DAX_QUERY: ${{ vars.TEST_DAX_QUERY }}
         TEST_MIN_TABLES_COUNT: ${{ vars.TEST_MIN_TABLES_COUNT }}
         OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
       run: |
