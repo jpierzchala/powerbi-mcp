@@ -117,8 +117,10 @@ class PowerBIHandlers:
         for key in to_delete:
             try:
                 del self.connector_pool[key]
-            except Exception:
-                pass
+            except Exception as e:
+                logger.warning(
+                    f"Failed to delete connector pool entry for key '{key}': {e}", exc_info=True
+                )
 
     async def _get_or_create_connected_connector(self, arguments: Dict[str, Any]) -> PowerBIConnector:
         xmla_endpoint, tenant_id, client_id, client_secret, initial_catalog = self._extract_connection_params(arguments)
@@ -160,7 +162,7 @@ class PowerBIHandlers:
 
         return connector
 
-    async def handle_list_tables(self, arguments: Optional[Dict[str, Any]] = None) -> str:
+    async def handle_list_tables(self, arguments: Dict[str, Any]) -> str:
         """List all available tables with descriptions and relationships (stateless)."""
         try:
             if not arguments:
