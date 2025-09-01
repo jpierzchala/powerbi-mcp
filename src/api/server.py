@@ -68,12 +68,12 @@ class PowerBIMCPServer:
         return await self.handlers._async_prepare_context()
 
     async def _handle_connect(self, arguments):
-        """Expose the handle connect method for backward compatibility with tests."""
-        return await self.handlers.handle_connect(arguments)
+        """Legacy method removed: explicit connect is no longer supported."""
+        return "The 'connect_powerbi' tool has been removed. Please pass connection parameters directly to each call."
 
-    async def _handle_list_tables(self):
+    async def _handle_list_tables(self, arguments):
         """Expose the handle list tables method for backward compatibility with tests."""
-        return await self.handlers.handle_list_tables()
+        return await self.handlers.handle_list_tables(arguments)
 
     async def _handle_get_table_info(self, arguments):
         """Expose the handle get table info method for backward compatibility with tests."""
@@ -100,44 +100,76 @@ class PowerBIMCPServer:
         async def handle_list_tools() -> List[Tool]:
             tools = [
                 Tool(
-                    name="connect_powerbi",
-                    description="Connect to a Power BI dataset using XMLA endpoint",
+                    name="list_tables",
+                    description="List all tables in a Power BI dataset (stateless)",
                     inputSchema={
                         "type": "object",
                         "properties": {
-                            "xmla_endpoint": {"type": "string", "description": "Power BI XMLA endpoint URL"},
-                            "tenant_id": {"type": "string", "description": "Azure AD Tenant ID (optional)"},
-                            "client_id": {"type": "string", "description": "Service Principal Client ID (optional)"},
-                            "client_secret": {
-                                "type": "string",
-                                "description": "Service Principal Client Secret (optional)",
-                            },
+                            # Endpoint aliases for user convenience
+                            "xmla_endpoint": {"type": "string", "description": "XMLA endpoint URL"},
+                            "server": {"type": "string", "description": "Alias for xmla_endpoint"},
+                            "data_source": {"type": "string", "description": "Alias for xmla_endpoint"},
+                            "workspace_connection": {"type": "string", "description": "Alias for xmla_endpoint"},
+                            # Catalog/dataset aliases
                             "initial_catalog": {"type": "string", "description": "Dataset name"},
+                            "database": {"type": "string", "description": "Alias for initial_catalog"},
+                            "catalog": {"type": "string", "description": "Alias for initial_catalog"},
+                            "dataset": {"type": "string", "description": "Alias for initial_catalog"},
+                            "model": {"type": "string", "description": "Alias for initial_catalog"},
+                            # Credentials (optional; fallback to DEFAULT_* env vars)
+                            "tenant_id": {"type": "string"},
+                            "client_id": {"type": "string"},
+                            "client_secret": {"type": "string"},
                         },
-                        "required": ["xmla_endpoint", "initial_catalog"],
+                        "required": ["initial_catalog"],
                     },
                 ),
                 Tool(
-                    name="list_tables",
-                    description="List all available tables in the connected Power BI dataset",
-                    inputSchema={"type": "object", "properties": {}},
-                ),
-                Tool(
                     name="get_table_info",
-                    description="Get detailed information about a specific table",
+                    description="Get detailed information about a specific table (stateless)",
                     inputSchema={
                         "type": "object",
-                        "properties": {"table_name": {"type": "string", "description": "Name of the table"}},
-                        "required": ["table_name"],
+                        "properties": {
+                            "table_name": {"type": "string", "description": "Name of the table"},
+                            # Connection parameters (same aliases as list_tables)
+                            "xmla_endpoint": {"type": "string"},
+                            "server": {"type": "string"},
+                            "data_source": {"type": "string"},
+                            "workspace_connection": {"type": "string"},
+                            "initial_catalog": {"type": "string"},
+                            "database": {"type": "string"},
+                            "catalog": {"type": "string"},
+                            "dataset": {"type": "string"},
+                            "model": {"type": "string"},
+                            "tenant_id": {"type": "string"},
+                            "client_id": {"type": "string"},
+                            "client_secret": {"type": "string"},
+                        },
+                        "required": ["table_name", "initial_catalog"],
                     },
                 ),
                 Tool(
                     name="execute_dax",
-                    description="Execute a custom DAX query",
+                    description="Execute a custom DAX query (stateless)",
                     inputSchema={
                         "type": "object",
-                        "properties": {"dax_query": {"type": "string", "description": "DAX query to execute"}},
-                        "required": ["dax_query"],
+                        "properties": {
+                            "dax_query": {"type": "string", "description": "DAX query to execute"},
+                            # Connection parameters (same aliases as list_tables)
+                            "xmla_endpoint": {"type": "string"},
+                            "server": {"type": "string"},
+                            "data_source": {"type": "string"},
+                            "workspace_connection": {"type": "string"},
+                            "initial_catalog": {"type": "string"},
+                            "database": {"type": "string"},
+                            "catalog": {"type": "string"},
+                            "dataset": {"type": "string"},
+                            "model": {"type": "string"},
+                            "tenant_id": {"type": "string"},
+                            "client_id": {"type": "string"},
+                            "client_secret": {"type": "string"},
+                        },
+                        "required": ["dax_query", "initial_catalog"],
                     },
                 ),
             ]
