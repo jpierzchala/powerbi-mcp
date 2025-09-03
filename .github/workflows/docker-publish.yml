@@ -7,7 +7,6 @@ on:
 env:
   REGISTRY: ghcr.io
   IMAGE_NAME: ${{ github.repository }}
-  IMAGE_NAME_LOWER: ${{ toLower(github.repository) }}
 
 jobs:
   build-and-push:
@@ -30,11 +29,18 @@ jobs:
         username: ${{ github.actor }}
         password: ${{ secrets.GITHUB_TOKEN }}
 
+    - name: Compute lowercase image name
+      id: vars
+      shell: bash
+      run: |
+        REPO="${{ github.repository }}"
+        echo "image=ghcr.io/${REPO,,}" >> "$GITHUB_OUTPUT"
+
     - name: Extract Docker metadata (tags, labels)
       id: meta
       uses: docker/metadata-action@v5
       with:
-        images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME_LOWER }}
+        images: ${{ steps.vars.outputs.image }}
         tags: |
           type=ref,event=branch
           type=ref,event=tag
