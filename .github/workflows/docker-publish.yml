@@ -1,7 +1,9 @@
 name: Build and Push Docker Image
 
 on:
-  push:
+  workflow_run:
+    workflows: [ "Tests" ]
+    types: [ completed ]
     branches: [ main, master ]
 
 env:
@@ -11,13 +13,16 @@ env:
 jobs:
   build-and-push:
     runs-on: ubuntu-latest
+    if: ${{ github.event.workflow_run.conclusion == 'success' }}
     permissions:
       contents: read
       packages: write
 
     steps:
-    - name: Checkout repository
+    - name: Checkout repository at tested commit
       uses: actions/checkout@v4
+      with:
+        ref: ${{ github.event.workflow_run.head_sha }}
 
     - name: Set up Docker Buildx
       uses: docker/setup-buildx-action@v3
@@ -35,16 +40,45 @@ jobs:
       run: |
         REPO="${{ github.repository }}"
         echo "image=ghcr.io/${REPO,,}" >> "$GITHUB_OUTPUT"
-    - name: Extract Docker metadata (tags, labels)
+    - name: Compute tags
       id: meta
-      uses: docker/metadata-action@v5
-      with:
-        images: ${{ steps.vars.outputs.image }}
-        tags: |
-          type=ref,event=branch
-          type=ref,event=tag
-          type=raw,value=latest,enable={{is_default_branch}}
-          type=sha,format=short
+      shell: bash
+      env:
+        HEAD_BRANCH: ${{ github.event.workflow_run.head_branch }}
+        RUN_REF: ${{ github.event.workflow_run.ref }}
+        DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+        HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
+      run: |
+        set -euo pipefail
+
+        IMAGE="${{ steps.vars.outputs.image }}"
+
+        # Detect branch for workflow_run on default branch
+        BRANCH="${HEAD_BRANCH:-}"
+        if [[ -z "${BRANCH}" && -n "${RUN_REF:-}" && "${RUN_REF}" =~ refs/heads/(.*) ]]; then
+          BRANCH="${BASH_REMATCH[1]}"
+        fi
+
+        if [[ -z "${BRANCH}" ]]; then
+          echo "Branch could not be determined; failing to avoid ambiguous tags" >&2
+          exit 1
+        fi
+
+        SHA="${HEAD_SHA}"
+        SHORT_SHA="${SHA:0:7}"
+
+        TAGS=()
+        TAGS+=("${IMAGE}:${BRANCH}")
+        TAGS+=("${IMAGE}:sha-${SHORT_SHA}")
+        if [[ "${BRANCH}" == "${DEFAULT_BRANCH}" ]]; then
+          TAGS+=("${IMAGE}:latest")
+        fi
+
+        {
+          echo 'tags<<EOF'
+          printf '%s\n' "${TAGS[@]}"
+          echo 'EOF'
+        } >> "$GITHUB_OUTPUT"
 
     # Note: Building only linux/amd64 due to ADOMD.NET retail package being amd64-only.
     # If/when upstream ARM packages are supported, add linux/arm64 here.
@@ -55,7 +89,6 @@ jobs:
         platforms: linux/amd64
         push: true
         tags: ${{ steps.meta.outputs.tags }}
-        labels: ${{ steps.meta.outputs.labels }}
         cache-from: type=gha
         cache-to: type=gha,mode=max
 
