@@ -35,7 +35,6 @@ jobs:
       run: |
         REPO="${{ github.repository }}"
         echo "image=ghcr.io/${REPO,,}" >> "$GITHUB_OUTPUT"
-
     - name: Extract Docker metadata (tags, labels)
       id: meta
       uses: docker/metadata-action@v5
