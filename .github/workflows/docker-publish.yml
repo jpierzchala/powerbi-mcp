@@ -1,7 +1,9 @@
 name: Build and Push Docker Image
 
 on:
-  push:
+  workflow_run:
+    workflows: [ "Tests" ]
+    types: [ completed ]
     branches: [ main, master ]
 
 env:
@@ -11,13 +13,16 @@ env:
 jobs:
   build-and-push:
     runs-on: ubuntu-latest
+    if: ${{ github.event.workflow_run.conclusion == 'success' }}
     permissions:
       contents: read
       packages: write
 
     steps:
-    - name: Checkout repository
+    - name: Checkout repository at tested commit
       uses: actions/checkout@v4
+      with:
+        ref: ${{ github.event.workflow_run.head_sha }}
 
     - name: Set up Docker Buildx
       uses: docker/setup-buildx-action@v3
@@ -35,16 +40,27 @@ jobs:
       run: |
         REPO="${{ github.repository }}"
         echo "image=ghcr.io/${REPO,,}" >> "$GITHUB_OUTPUT"
-    - name: Extract Docker metadata (tags, labels)
+    - name: Compute tags
       id: meta
-      uses: docker/metadata-action@v5
-      with:
-        images: ${{ steps.vars.outputs.image }}
-        tags: |
-          type=ref,event=branch
-          type=ref,event=tag
-          type=raw,value=latest,enable={{is_default_branch}}
-          type=sha,format=short
+      shell: bash
+      run: |
+        IMAGE="${{ steps.vars.outputs.image }}"
+        BRANCH="${{ github.event.workflow_run.head_branch }}"
+        SHA="${{ github.event.workflow_run.head_sha }}"
+        SHORT_SHA="${SHA:0:7}"
+
+        TAGS=()
+        TAGS+=("${IMAGE}:${BRANCH}")
+        TAGS+=("${IMAGE}:sha-${SHORT_SHA}")
+        if [[ "${BRANCH}" == "master" || "${BRANCH}" == "main" ]]; then
+          TAGS+=("${IMAGE}:latest")
+        fi
+
+        {
+          echo 'tags<<EOF'
+          printf '%s\n' "${TAGS[@]}"
+          echo 'EOF'
+        } >> "$GITHUB_OUTPUT"
 
     # Note: Building only linux/amd64 due to ADOMD.NET retail package being amd64-only.
     # If/when upstream ARM packages are supported, add linux/arm64 here.
@@ -55,7 +71,6 @@ jobs:
         platforms: linux/amd64
         push: true
         tags: ${{ steps.meta.outputs.tags }}
-        labels: ${{ steps.meta.outputs.labels }}
         cache-from: type=gha
         cache-to: type=gha,mode=max
 
